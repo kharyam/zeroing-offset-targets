@@ -198,6 +198,18 @@ a{color:inherit}
 .pv-foot{padding:.45rem 1rem;font-size:.72rem;color:var(--ink-3);border-top:1px solid var(--rule)}
 
 /* ---------- scope view ---------- */
+/* distance chips */
+.chips{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
+.chip-d{display:inline-flex;align-items:center;gap:.35rem;padding:.3rem .55rem;border:1px solid var(--rule);border-radius:3px;font-family:var(--mono);font-size:.85rem;cursor:pointer;background:var(--sheet);transition:background var(--t),color var(--t),border-color var(--t)}
+.chip-d:hover{border-color:var(--ink-3)}
+.chip-d.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.chip-x{border:0;background:none;color:inherit;opacity:.55;cursor:pointer;font-size:1rem;line-height:1;padding:0 .1rem}
+.chip-x:hover{opacity:1;color:var(--accent)}
+.chip-d.on .chip-x:hover{color:#fff}
+.chip-add{display:inline-flex;gap:.25rem;align-items:center}
+.chip-add input{width:5.4rem;height:30px;padding:0 .45rem;border:1px solid var(--rule);border-radius:3px;font-family:var(--mono);font-size:.85rem}
+.chip-add input:focus{border-color:var(--ink);outline:none}
+
 .scope-ctl{display:flex;align-items:center;gap:.8rem;margin-bottom:.8rem}
 .scope-ctl label{font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);font-weight:600;white-space:nowrap}
 .scope-ctl input[type=range]{flex:1;accent-color:var(--accent);height:28px;cursor:pointer}
@@ -742,7 +754,13 @@ function drawTarget(page, T) {
   const ftop = Hf - M;
   page.setFill(0, 0, 0); page.setStroke(0, 0, 0);
   page.setFont('helvetica-bold', 15); ht(M, ftop - 15, T.name);
-  if (T.calibStamp) { page.setFont('helvetica-bold', 7); const w = page.textWidth(T.calibStamp); ht(Wf - M - w, ftop - 12, T.calibStamp); }
+  // "hang at" banner, top right: the one thing that must not be mixed up between pages
+  page.setFont('helvetica-bold', 13);
+  const hangTxt = `HANG THIS TARGET AT ${fmtYd(T.d)} YARDS`, hangW = page.textWidth(hangTxt);
+  const bx0 = Wf - M - hangW - 16, bx1 = Wf - M, by0 = ftop - 22, by1 = ftop - 2;
+  page.setLineWidth(1.4); hl(bx0, by0, bx1, by0); hl(bx0, by1, bx1, by1); hl(bx0, by0, bx0, by1); hl(bx1, by0, bx1, by1);
+  ht(bx0 + 8, ftop - 16.5, hangTxt);
+  if (T.calibStamp) { page.setFont('helvetica-bold', 6.5); const w = page.textWidth(T.calibStamp); ht(Wf - M - w, ftop + 4, T.calibStamp); }
   page.setFont('helvetica', 9.5);
   let x = M; const y1 = ftop - 29;
   const p1 = `Zero on this target at ${fmtYd(T.d)} yd `;
@@ -892,6 +910,7 @@ function drawCover(ctx, targets, opts) {
     'Each target page carries a horizontal and a vertical 4 in ruler, both ticked in 1/16 in. Measure both.',
     'Printers can scale differently across the page than along the paper feed. Every offset here is vertical, so the vertical ruler is the one that actually governs your zero — a correct horizontal bar alone proves nothing.',
   ];
+  if (new Set(targets.map(t => t.shortName + '|' + t.Z)).size < targets.length) gridnotes.push('A rifle with more than one page: shoot the shortest distance first, dial the correction the calculator gives, then hang the next page. Each step reads finer than the last. Confirm at the zero distance.');
   if (targets.some(t => t.layout.orient === 'landscape')) gridnotes.push('Targets marked THIS EDGE UP are printed landscape to fit their offset. Hang them rotated so that line reads normally; the rulers are labelled for the hung orientation.');
   for (const n of gridnotes) para(n, 'helvetica', 9, 13);
 
@@ -905,7 +924,8 @@ function drawCover(ctx, targets, opts) {
     const d = +dstr, moa = BAL.inchesPerMOA(d);
     notes.push(`•  ${dstr} yd is a coarse zero. 1 MOA subtends only ${(Math.round(moa * 1000) / 1000)} in at this distance, so a 1/2-MOA click moves impact ~${fmt2(moa / 2)} in — finer than you can reliably read on paper. A 0.1 in error in group center is about ${fmt2(0.1 / moa)} in at 100 yd.`);
   }
-  notes.push(`•  Measure the distance. Each yard of range error shifts the correct offset by about ${targets.map(t => `${fmt2(t.rangeErrPerYd)} in (${t.shortName}/${fmtYd(t.Z)} yd)`).join(', ')}. The short-zero targets are the fussy ones.`);
+  const seenRE = new Set(), reList = targets.filter(t => { const k = t.shortName + '|' + t.Z; if (seenRE.has(k)) return false; seenRE.add(k); return true; });   // range error depends on the zero, not the page
+  notes.push(`•  Measure the distance. Each yard of range error shifts the correct offset by about ${reList.map(t => `${fmt2(t.rangeErrPerYd)} in (${t.shortName}/${fmtYd(t.Z)} yd)`).join(', ')}. The short-zero targets are the fussy ones.`);
   notes.push('•  Treat this as a first-shot-on-paper zero. It gets you close enough to confirm at real distance, then refine there.');
   if (targets.some(t => t.load.estimated)) notes.push(`•  Velocities marked "est." were estimated from barrel length. A chronographed figure is better, but at these distances the geometry dominates and the printed offset moves by well under 1 MOA at the far zero.`);
   if (targets.some(t => t.holdType === 'six')) notes.push(`•  Targets with a 6 o'clock hold include your hold offset in the printed offset. Hold exactly the way you entered it, on this target and at the zero distance.`);
@@ -961,13 +981,13 @@ function makeGun(over = {}) {
     id: newId(), name: 'New rifle', cartridge: p.cartridge, platform: 'rifle', sightType: 'optic',
     sightHeight: 2.6, barrelLength: p.refBarrel,
     load: { presetId: p.id, name: p.name, v0: p.v0, bc: p.bc, estimated: false },
-    shootDistance: 10, defaultZero: 100, clickValue: '0.25moa', scopeYd: 300,
+    shootDistances: [10, 25], previewDistance: 10, defaultZero: 100, clickValue: '0.25moa', scopeYd: 300,
     hold: { type: 'center', offsetIn: 0 },
   }, over);
 }
 function defaultDb() {
   return {
-    schema: 1,
+    schema: 2,
     guns: [
       makeGun({ name: 'AR-15', cartridge: '5.56 NATO', loadId: '556-55', defaultZero: 100, clickValue: '0.5moa' }),
       makeGun({ name: 'AR-9', cartridge: '9mm', loadId: '9mm-c', defaultZero: 25, clickValue: '0.5moa' }),
@@ -984,7 +1004,13 @@ function normalizeGun(g) {
   out.load = Object.assign({}, base.load, g.load || {});
   out.hold = Object.assign({}, base.hold, g.hold || {});
   if (!out.id) out.id = newId();
-  for (const k of ['sightHeight', 'shootDistance', 'defaultZero']) out[k] = +out[k] || base[k];
+  for (const k of ['sightHeight', 'defaultZero']) out[k] = +out[k] || base[k];
+  // schema 1 had one shootDistance; schema 2 has a list, one page each
+  const rawD = Array.isArray(g.shootDistances) ? g.shootDistances : [g.shootDistance];
+  out.shootDistances = [...new Set(rawD.map(Number).filter(x => x > 0).map(x => Math.round(x * 10) / 10))].sort((a, b) => a - b);
+  if (!out.shootDistances.length) out.shootDistances = [...base.shootDistances];
+  out.previewDistance = out.shootDistances.some(x => Math.abs(x - +g.previewDistance) < 0.01) ? +g.previewDistance : out.shootDistances[0];
+  delete out.shootDistance;
   out.load.v0 = +out.load.v0 || base.load.v0; out.load.bc = +out.load.bc || base.load.bc;
   if (out.barrelLength != null && out.barrelLength !== '') out.barrelLength = +out.barrelLength;
   if (!['rifle', 'handgun'].includes(out.platform)) out.platform = 'rifle';
@@ -1002,7 +1028,7 @@ function migrate(raw) {
   db.settings = Object.assign(db.settings, raw.settings || {});
   if (!PAPERS[db.settings.paper]) db.settings.paper = 'letter';
   db.settings.selected = (db.settings.selected || []).filter(id => db.guns.some(g => g.id === id));
-  db.schema = 1;   // future schema bumps migrate here
+  db.schema = 2;   // 1 → 2: shootDistance became shootDistances[] (handled in normalizeGun)
   return db;
 }
 function loadDb() { try { return migrate(JSON.parse(localStorage.getItem(STORE_KEY))); } catch (e) { return defaultDb(); } }
@@ -1018,7 +1044,7 @@ function calibActive() { const c = db.calibration; return Math.abs(c.x - 1) > 1e
 function calibStamp() { if (!calibActive()) return ''; const c = db.calibration; return `CALIBRATED FOR ${c.printer || 'ONE PRINTER'}: x ×${c.x.toFixed(3)}, y ×${c.y.toFixed(3)} — WRONG ON ANY OTHER PRINTER`; }
 
 function computeTarget(gun, ov = {}) {
-  const d = Math.max(0.5, +(ov.d ?? gun.shootDistance)), Z = Math.max(0.5, +(ov.Z ?? gun.defaultZero));
+  const d = Math.max(0.5, +(ov.d ?? gun.previewDistance)), Z = Math.max(0.5, +(ov.Z ?? gun.defaultZero));
   const sh = +(ov.sh ?? gun.sightHeight);
   const load = { v0: +(ov.v0 ?? gun.load.v0), bc: +(ov.bc ?? gun.load.bc), estimated: !!gun.load.estimated, name: gun.load.name };
   const holdType = gun.sightType === 'irons' ? gun.hold.type : 'center';
@@ -1041,7 +1067,7 @@ function computeTarget(gun, ov = {}) {
   const varianceRows = shs.map(h => ({ sh: h, off: BAL.totalOffset(h, Z, d, load, hold), user: Math.abs(h - sh) < 0.005 }));
   const cv = clickValueById(gun.clickValue);
   const T = {
-    gun, d, Z, sh, load, hold, holdType, geom, offset, dropD, dropZ, layout, varianceRows,
+    gun, d, Z, sh, load, hold, holdType, geom, offset, dropD, dropZ, layout, varianceRows, distances: gun.shootDistances,
     name: `${gun.name}  /  ${gun.cartridge}`.trim(), shortName: gun.name,
     loadLabel: `${load.name} @ ${load.estimated ? 'est. ' : '~'}${Math.round(load.v0)} fps`,
     rangeErrPerYd: (sh + dropZ + hold) / Z,
@@ -1062,10 +1088,9 @@ function computeTarget(gun, ov = {}) {
    SECTION 8 — UI: INVENTORY + SETUP FORM
    ===================================================================== */
 function gunSummary(g) {
-  const T = computeTarget(g);
-  const cls = T.layout.mode === 'combined' ? 'onaim' : 'lowhigh';
-  const word = !T.layout.ok ? `<span class="lowhigh">${T.layout.reason === 'model' ? 'not a zeroing target' : 'won’t fit'}</span>` : T.layout.mode === 'combined' ? '<span class="onaim">on aim</span>' : `<span class="${cls}">${fmt2(Math.abs(T.offset))}″ ${dirWord(T.offset)}</span>`;
-  return `${fmtYd(T.d)} → ${fmtYd(T.Z)} yd · ${word}`;
+  const word = T => !T.layout.ok ? `<span class="lowhigh">${T.layout.reason === 'model' ? 'not a zeroing target' : 'won’t fit'}</span>` : T.layout.mode === 'combined' ? '<span class="onaim">on aim</span>' : `<span class="lowhigh">${fmt2(Math.abs(T.offset))}″ ${dirWord(T.offset)}</span>`;
+  const parts = g.shootDistances.map(d => { const T = computeTarget(g, { d }); return `${fmtYd(d)} yd ${word(T)}`; });
+  return `${parts.join(' · ')} → ${fmtYd(g.defaultZero)} yd zero`;
 }
 function renderInventory() {
   const list = $('#gun-list');
@@ -1118,8 +1143,10 @@ function renderSetup() {
       <div class="field"><label>&nbsp;</label><div class="note" id="est-note">${estimateNote(g)}</div></div>
     </div>
     <div class="subhead">Distances</div>
-    <div class="row row-3">
-      ${fieldNum('f-d', 'Shoot this target at', g.shootDistance, '1', 'yd', 'min="1"')}
+    <div class="field"><label>Shoot this target at <span class="u">yd — one page per distance; click one to preview it</span></label>
+      <div class="chips" id="dist-chips">${g.shootDistances.map(d => `<span class="chip-d${Math.abs(d - g.previewDistance) < 0.01 ? ' on' : ''}" data-dist="${d}" role="button" tabindex="0">${fmtYd(d)} yd${g.shootDistances.length > 1 ? `<button type="button" class="x" data-dist-del="${d}" aria-label="Remove ${fmtYd(d)} yd" title="Remove">×</button>` : ''}</span>`).join('')}
+        <span class="chip-add"><input id="f-dadd" type="number" min="1" step="1" placeholder="add yd" aria-label="Add a shooting distance"><button type="button" id="f-dadd-btn" aria-label="Add distance" title="Add">+</button></span></div></div>
+    <div class="row">
       ${fieldNum('f-z', 'Rifle zeroed at', g.defaultZero, '1', 'yd', 'min="1"')}
       <div class="field"><label for="f-click">Turret clicks</label><select id="f-click" data-f="clickValue">${CLICK_VALUES.map(c => `<option value="${c.id}" ${g.clickValue === c.id ? 'selected' : ''}>${c.label}</option>`).join('')}</select></div>
     </div>
@@ -1137,9 +1164,9 @@ function estimateNote(g) {
   if (g.barrelLength == null || g.barrelLength === '' || isNaN(g.barrelLength)) return `Preset velocity is for a ${p.refBarrel} in barrel. Enter yours to estimate; a chronographed value always wins.`;
   if (g.load.estimated) {
     const e = estimateVelocity(p, g.barrelLength);
-    const T0 = BAL.totalOffset(g.sightHeight, g.defaultZero, g.shootDistance, { v0: p.v0, bc: p.bc }, 0);
-    const T1 = BAL.totalOffset(g.sightHeight, g.defaultZero, g.shootDistance, { v0: g.load.v0, bc: p.bc }, 0);
-    return `<span class="est"><b>Estimate</b> — about ${p.fpsPerIn} fps per inch from the ${p.refBarrel} in reference${e.outside ? `, <b>outside the ${e.lo}–${e.hi} in range this figure is good for</b>` : ''}. Versus the preset it moves the ${fmtYd(g.shootDistance)} yd offset by ${fmt2(Math.abs(T1 - T0))} in — well under 1 MOA at ${fmtYd(g.defaultZero)} yd. Not critical.</span>`;
+    const T0 = BAL.totalOffset(g.sightHeight, g.defaultZero, g.previewDistance, { v0: p.v0, bc: p.bc }, 0);
+    const T1 = BAL.totalOffset(g.sightHeight, g.defaultZero, g.previewDistance, { v0: g.load.v0, bc: p.bc }, 0);
+    return `<span class="est"><b>Estimate</b> — about ${p.fpsPerIn} fps per inch from the ${p.refBarrel} in reference${e.outside ? `, <b>outside the ${e.lo}–${e.hi} in range this figure is good for</b>` : ''}. Versus the preset it moves the ${fmtYd(g.previewDistance)} yd offset by ${fmt2(Math.abs(T1 - T0))} in — well under 1 MOA at ${fmtYd(g.defaultZero)} yd. Not critical.</span>`;
   }
   return `Velocity entered by hand — it overrides any barrel-length estimate.`;
 }
@@ -1170,7 +1197,6 @@ function onSetupInput(e) {
       if (p && g.barrelLength != null && !isNaN(g.barrelLength)) { applyEstimate(g, p); $('#f-v0').value = Math.round(g.load.v0); $('#f-v0').classList.add('est'); }
       $('#est-note').innerHTML = estimateNote(g); break;
     }
-    case 'f-d': if (+v > 0) g.shootDistance = +v; break;
     case 'f-z': if (+v > 0) g.defaultZero = +v; break;
     case 'f-hold': g.hold.offsetIn = Math.max(0, +v || 0); break;
     case 'clickValue': g.clickValue = v; $('#calc-click').value = v; break;
@@ -1182,7 +1208,29 @@ function onSetupInput(e) {
 }
 function applyEstimate(g, p) { const e = estimateVelocity(p, g.barrelLength); g.load.v0 = e.v0; g.load.estimated = true; }
 function syncPresetSelect(sel, h) { const s = $(sel); if (!s) return; const m = [...s.options].find(o => o.value !== '' && Math.abs(+o.value - h) < 0.005); s.value = m ? m.value : ''; }
+function addDistance(g) {
+  const inp = $('#f-dadd'), d = Math.round((+inp.value || 0) * 10) / 10;
+  if (!(d > 0)) { inp.focus(); return; }
+  if (!g.shootDistances.some(x => Math.abs(x - d) < 0.01)) g.shootDistances = [...g.shootDistances, d].sort((a, b) => a - b);
+  g.previewDistance = d;
+  saveDb(); renderSetup(); refreshInventoryRow(g); updateBatchState(); refreshDerived(false);
+  $('#f-dadd')?.focus();
+}
+function selectDistance(g, d) {
+  g.previewDistance = d; saveDb();
+  for (const c of document.querySelectorAll('[data-dist]')) { const on = Math.abs(+c.dataset.dist - d) < 0.01; c.classList.toggle('on', on); c.setAttribute('aria-pressed', on); }
+  refreshDerived(false);
+}
 function onSetupSeg(e) {
+  const g0 = activeGun(); if (!g0) return;
+  const del = e.target.closest('[data-dist-del]');
+  if (del) {
+    const d = +del.dataset.distDel;
+    if (g0.shootDistances.length > 1) { g0.shootDistances = g0.shootDistances.filter(x => Math.abs(x - d) >= 0.01); if (Math.abs(g0.previewDistance - d) < 0.01) g0.previewDistance = g0.shootDistances[0]; saveDb(); renderSetup(); refreshInventoryRow(g0); updateBatchState(); refreshDerived(false); }
+    return;
+  }
+  const chip = e.target.closest('[data-dist]'); if (chip) { selectDistance(g0, +chip.dataset.dist); return; }
+  if (e.target.closest('#f-dadd-btn')) { addDistance(g0); return; }
   const btn = e.target.closest('button[data-v]'); if (!btn) return;
   const segEl = btn.closest('[data-seg]'); const g = activeGun(); if (!segEl || !g) return;
   const k = segEl.dataset.seg, v = btn.dataset.v;
@@ -1200,12 +1248,12 @@ function onSetupSeg(e) {
    ===================================================================== */
 const shown = { sh: 0, Z: 0, d: 0, v0: 0, bc: 0, hold: 0 };
 let anim = null, shownInit = false, drawPath = false;
-function targetVals(g) { return { sh: g.sightHeight, Z: g.defaultZero, d: g.shootDistance, v0: g.load.v0, bc: g.load.bc, hold: g.sightType === 'irons' && g.hold.type === 'six' ? +g.hold.offsetIn || 0 : 0 }; }
+function targetVals(g) { return { sh: g.sightHeight, Z: g.defaultZero, d: g.previewDistance, v0: g.load.v0, bc: g.load.bc, hold: g.sightType === 'irons' && g.hold.type === 'six' ? +g.hold.offsetIn || 0 : 0 }; }
 function refreshDerived(snap) {
   const g = activeGun();
   if (!g) { $('#readout').innerHTML = '<div class="empty">Nothing to compute.</div>'; $('#warnings').innerHTML = ''; $('#traj').innerHTML = ''; $('#sheet').innerHTML = ''; $('#calc-result').innerHTML = ''; return; }
   const to = targetVals(g);
-  updatePrintButtons(computeTarget(g));
+  updatePrintButtons(g);
   if (snap || !shownInit || REDUCED) { Object.assign(shown, to); shownInit = true; drawPath = true; if (anim) { cancelAnimationFrame(anim); anim = null; } drawFrame(); drawPath = false; return; }
   const from = Object.assign({}, shown), t0 = performance.now(), dur = 300;
   if (anim) cancelAnimationFrame(anim);
@@ -1220,13 +1268,15 @@ function refreshDerived(snap) {
 }
 // Why a target can't be generated, or null when it can.
 function blockReason(T) { return !T ? 'Nothing to print' : T.holdMissing ? 'Choose a hold type first' : !T.layout.ok ? (T.layout.reason === 'model' ? 'Not a zeroing target — no PDF' : 'Won’t fit on paper — no PDF') : null; }
-function updatePrintButtons(T) {
-  const reason = blockReason(T);
+// A gun prints only if every one of its distances does.
+function gunBlockReason(g) { if (!g) return 'Nothing to print'; for (const d of g.shootDistances) { const r = blockReason(computeTarget(g, { d })); if (r) return r; } return null; }
+function updatePrintButtons(g) {
+  const reason = gunBlockReason(g);
   for (const b of [$('#make-pdf'), $('#make-pdf-modal')]) { b.disabled = !!reason; b.textContent = reason || 'Generate PDF'; b.classList.toggle('accent', !reason); }
 }
 function updateBatchState() {
   const sel = db.guns.filter(g => db.settings.selected.includes(g.id));
-  const blocked = sel.filter(g => blockReason(computeTarget(g))).length;
+  const blocked = sel.filter(g => gunBlockReason(g)).length;
   $('#batch-note').textContent = sel.length ? `${sel.length} selected${blocked ? ` · ${blocked} blocked` : ''}` : 'none selected';
   for (const b of [$('#make-batch'), $('#make-batch-modal')]) {
     b.disabled = !sel.length || blocked > 0;
@@ -1288,13 +1338,17 @@ function renderWarnings(T) {
   // The spec's premise is that geometry (d/Z scaling) dominates the drop model. Say so when it stops being true.
   const ballistic = (T.d / T.Z) * T.dropZ, modelErr = 0.1 * ballistic;
   if (L.ok && (ballistic > 0.5 * T.sh || modelErr > 0.1)) item('', `<b>Long zero — the drop model matters here.</b> ${fmt2(ballistic)} in of this offset comes from the predicted ${fmt2(T.dropZ)} in of drop at ${fmtYd(T.Z)} yd scaled by d/Z, not from sight geometry. A 10% error in velocity or BC moves the printed offset by about <b>${fmt2(modelErr)} in</b>. Treat this as a rough first shot and confirm at distance; the method is at its best for zeros of 25–300 yd.`);
+  const next = (g.shootDistances || []).find(x => x > T.d + 0.01);
+  if (L.ok && next) item('calm', `<b>Next: hang the ${fmtYd(next)} yd page.</b> Dial what the calculator says from this group, then confirm at ${fmtYd(next)} yd — one click there moves impact ${(next / T.d).toFixed(1)}× as far on paper, so it is easier to read. Finish at ${fmtYd(T.Z)} yd.`);
   $('#warnings').innerHTML = w.join('');
 }
 
 function renderTrajectory(T) {
-  const W = 900, H = 310, pl = 58, pr = 34, ptop = 30, pb = 62;
   const { d, Z, sh, hold } = T;
-  const maxYd = Math.max(d, Z) * 1.12;
+  const dists = [...new Set([...(T.gun.shootDistances || []), d].map(x => Math.round(x * 10) / 10))].sort((a, b) => a - b);
+  const dimList = [...new Set([...dists.filter(x => Math.abs(x - Z) >= 0.01), Z])].sort((a, b) => a - b);
+  const W = 900, pl = 58, pr = 34, ptop = 30, pb = 30 + 17 * dimList.length, H = 248 + pb;
+  const maxYd = Math.max(...dists, Z) * 1.12;
   const X = yd => pl + yd / maxYd * (W - pl - pr);
   const n = 140, pts = []; let hmin = -sh, hmax = 0;
   for (let i = 0; i <= n; i++) { const x = maxYd * i / n; const h = BAL.heightVsLOS(sh, Z, x, T.load, hold); pts.push([x, h]); if (h < hmin) hmin = h; if (h > hmax) hmax = h; }
@@ -1319,29 +1373,36 @@ function renderTrajectory(T) {
   s.push(`<text x="${gx - 30}" y="${f(Y(-sh)) + 18}" font-size="9">muzzle</text>`);
   s.push(`<text x="${gx + 6}" y="${f(Y(0)) - 6}" font-size="9">sight height ${fmtIn(sh)} in</text>`);
   // targets
-  const sheet = (x, label, sub, big) => {
+  const sheet = (x, label, sub, big, lift = 0) => {
     const top = Y(half + hold), bot = Y(-half + hold), w = big ? 10 : 8;
     s.push(`<rect class="shadow" x="${f(x - w / 2 + 3)}" y="${f(top + 4)}" width="${w}" height="${f(bot - top)}"/>`);
-    s.push(`<rect class="sheet" x="${f(x - w / 2)}" y="${f(top)}" width="${w}" height="${f(bot - top)}"/>`);
-    s.push(`<text x="${f(x)}" y="${f(top - 8)}" font-size="10" font-weight="700" text-anchor="middle" fill="#14181C">${label}</text>`);
-    if (sub) s.push(`<text x="${f(x)}" y="${f(top - 20)}" font-size="9" text-anchor="middle">${sub}</text>`);
+    s.push(`<rect class="sheet" x="${f(x - w / 2)}" y="${f(top)}" width="${w}" height="${f(bot - top)}"${big ? '' : ' opacity=".75"'}/>`);
+    if (lift) s.push(`<line x1="${f(x)}" y1="${f(top)}" x2="${f(x)}" y2="${f(top - lift + 2)}" stroke="#C9D2CB" stroke-width="1"/>`);
+    s.push(`<text x="${f(x)}" y="${f(top - 8 - lift)}" font-size="10" font-weight="${big ? 700 : 400}" text-anchor="middle" fill="#14181C">${label}</text>`);
+    if (sub) s.push(`<text x="${f(x)}" y="${f(top - 20 - lift)}" font-size="9" text-anchor="middle">${sub}</text>`);
   };
   const same = Math.abs(d - Z) < 0.01;
   const dia = (x, y, r) => `<polygon points="${f(x)},${f(y - r)} ${f(x + r)},${f(y)} ${f(x)},${f(y + r)} ${f(x - r)},${f(y)}" fill="#14181C"/><circle cx="${f(x)}" cy="${f(y)}" r="1.2" fill="#fff"/>`;
   const ring = (x, y) => `<circle cx="${f(x)}" cy="${f(y)}" r="6" fill="none" stroke="#E4511C" stroke-width="2"/><circle cx="${f(x)}" cy="${f(y)}" r="1.4" fill="#E4511C"/>`;
-  if (!same) {
-    sheet(X(Z), `zero target · ${fmtYd(Z)} yd`, 'aim = impact here', false);
-    s.push(dia(X(Z), Y(hold), 6), ring(X(Z), Y(hold)));
-  }
-  sheet(X(d), same ? `target at zero · ${fmtYd(d)} yd` : `this target · ${fmtYd(d)} yd`, same ? 'aim = impact' : (T.layout.mode === 'combined' ? 'one mark: aim = impact' : `impact ${fmt2(Math.abs(T.offset))} in ${dirWord(T.offset)}`), true);
-  s.push(dia(X(d), Y(hold), 7), ring(X(d), Y(hold - T.offset)));
+  const atZero = dists.some(x => Math.abs(x - Z) < 0.01);
+  sheet(X(Z), `${atZero ? 'target at zero' : 'zero target'} · ${fmtYd(Z)} yd`, 'aim = impact here', same);
+  s.push(dia(X(Z), Y(hold), same ? 7 : 6), ring(X(Z), Y(hold)));
+  // one paper target per shooting distance; the previewed one is bold, labels stagger when crowded
+  const paper = dists.filter(x => Math.abs(x - Z) >= 0.01);
+  paper.forEach((dd, i) => {
+    const isP = Math.abs(dd - d) < 0.01;
+    const off = isP ? T.offset : BAL.totalOffset(sh, Z, dd, T.load, hold);
+    const crowded = i > 0 && X(dd) - X(paper[i - 1]) < 110;
+    sheet(X(dd), `${isP ? 'this page' : 'page'} · ${fmtYd(dd)} yd`, isP && T.layout.mode === 'combined' ? 'one mark: aim = impact' : `impact ${fmt2(Math.abs(off))} in ${dirWord(off)}`, isP, crowded ? 26 * (i % 2) : 0);
+    s.push(dia(X(dd), Y(hold), isP ? 7 : 5), ring(X(dd), Y(hold - off)));
+  });
   // bullet path
   const path = pts.map((p, i) => `${i ? 'L' : 'M'}${f(X(p[0]))} ${f(Y(p[1]))}`).join(' ');
   s.push(`<path class="path${drawPath && !REDUCED ? ' draw' : ''}" pathLength="1" d="${path}"/>`);
   // near-zero crossing marker
   if (T.nearZero && T.nearZero < Math.min(d, Z) * 0.85 && !same) s.push(`<circle cx="${f(X(T.nearZero))}" cy="${f(Y(0))}" r="3" fill="#fff" stroke="#14181C" stroke-width="1.2"/><text x="${f(X(T.nearZero))}" y="${f(Y(0)) + 16}" font-size="9" text-anchor="middle">crosses at ${fmtYd(T.nearZero)} yd</text>`);
   // distance dimensions from the muzzle
-  const dims = same ? [[d, `${fmtYd(d)} yd`]] : [[Math.min(d, Z), `${fmtYd(Math.min(d, Z))} yd`], [Math.max(d, Z), `${fmtYd(Math.max(d, Z))} yd`]];
+  const dims = dimList.map(yd => [yd, `${fmtYd(yd)} yd`]);
   dims.forEach(([yd, label], i) => {
     const yy = H - pb + 20 + i * 17, x0 = X(0), x1 = X(yd);
     s.push(`<line class="dim" x1="${x0}" y1="${yy}" x2="${f(x1)}" y2="${yy}"/><line class="dim" x1="${x0}" y1="${yy - 5}" x2="${x0}" y2="${yy + 5}"/><line class="dim" x1="${f(x1)}" y1="${yy - 5}" x2="${f(x1)}" y2="${yy + 5}"/>`);
@@ -1358,7 +1419,7 @@ const SCOPE_MAGS = [1, 2, 3, 4, 6, 8, 10, 12, 16, 20, 25];
 function scopeMaxYd(load) { let m = 200; for (let D = 250; D <= 1500; D += 50) { if (BAL.velocityAt(D, load) < 700) break; m = D; } return m; }
 function renderScope(T) {
   const g = T.gun, load = T.load, Z = T.Z, unit = T.clickValue.unit;
-  const min = Math.max(5, Math.round(T.d / 5) * 5);   // paper distance → zero → far: the three-distance picture
+  const min = Math.max(5, Math.round(Math.min(...(T.gun.shootDistances || [T.d]), T.d) / 5) * 5);   // paper → zero → far: the three-distance picture
   const max = Math.max(scopeMaxYd(load), Math.ceil(Z / 50) * 50 + 100);
   const sl = $('#scope-yd'); sl.min = min; sl.max = max;
   let D = +g.scopeYd || 300; D = Math.min(max, Math.max(min, Math.round(D / 5) * 5)); sl.value = D;
@@ -1465,7 +1526,10 @@ let pvIdx = 0;
 function pvSet() { const sel = db.guns.filter(g => db.settings.selected.includes(g.id)); const a = activeGun(); return sel.length ? sel : (a ? [a] : []); }
 function pvPages() {
   const a = activeGun();
-  const targets = pvSet().map(g => ({ kind: 'target', gun: g, T: a && g.id === a.id ? computeTarget(g, shown) : computeTarget(g) }));
+  const targets = pvSet().flatMap(g => g.shootDistances.map(d => ({
+    kind: 'target', gun: g, d,
+    T: a && g.id === a.id && Math.abs(d - a.previewDistance) < 0.01 ? computeTarget(g, shown) : computeTarget(g, { d }),
+  })));
   return [{ kind: 'cover', targets: targets.map(t => t.T) }, ...targets];
 }
 function coverSvg(targets) {
@@ -1553,11 +1617,11 @@ function clearCalibration() { db.calibration = { printer: db.calibration.printer
 
 function generate(guns, btn) {
   if (!window.jspdf) { showPdfBanner(); return; }
-  const targets = guns.map(g => computeTarget(g));
+  const targets = guns.flatMap(g => g.shootDistances.map(d => computeTarget(g, { d })));
   const blocked = targets.filter(t => t.holdMissing || !t.layout.ok);
   if (blocked.length) { alert(blocked.map(t => `${t.name}: ${t.holdMissing ? 'choose a hold type for the iron sights' : `offset won’t fit on ${t.layout.paper.label}${t.fit ? ` — try ${t.fit.d} yd` : ''}`}`).join('\n')); return; }
   const doc = buildPdf(targets, { paper: db.settings.paper, calib: calibActive() ? db.calibration : null, calibStamp: calibStamp() });
-  const fname = (targets.length === 1 ? `${targets[0].gun.name}-${fmtYd(targets[0].d)}yd-for-${fmtYd(targets[0].Z)}yd-zero` : `zeroing-targets-${targets.length}`).replace(/[^\w.-]+/g, '_') + '.pdf';
+  const fname = (guns.length === 1 ? `${guns[0].name}-${guns[0].shootDistances.map(fmtYd).join('-')}yd-for-${fmtYd(guns[0].defaultZero)}yd-zero` : `zeroing-targets-${targets.length}-pages`).replace(/[^\w.-]+/g, '_') + '.pdf';
   doc.save(fname);
   const old = btn.textContent; btn.textContent = 'Saved ✓'; btn.classList.add('done');
   setTimeout(() => { btn.textContent = old; btn.classList.remove('done'); }, 1400);
@@ -1609,6 +1673,8 @@ function selfTest() {
   const Ls = layoutFor(4.0, 'letter'); ok('layout: 4.0 in → grid shrinks, still portrait', Ls.ok && Ls.shrunk && Ls.orient === 'portrait', Ls.ok ? `GH ${(Ls.GH / IN).toFixed(2)} in` : '');
   const Ll = layoutFor(6.0, 'letter'); ok('layout: 6.0 in → falls back to landscape', Ll.ok && Ll.orient === 'landscape', '');
   const Lr = layoutFor(9.0, 'letter'); ok('layout: 9.0 in → refused with required span', !Lr.ok && Lr.requiredSpan > Lr.availableSpan, Lr.ok ? '' : `needs ${Lr.requiredSpan.toFixed(2)} in, has ${Lr.availableSpan.toFixed(2)} in`);
+  const mg = normalizeGun({ shootDistance: 15 });
+  ok('inventory: single-distance guns migrate to a distance list; new guns default to 10 + 25 yd', mg.shootDistances.length === 1 && mg.shootDistances[0] === 15 && mg.previewDistance === 15 && makeGun().shootDistances.join(',') === '10,25', `migrated → [${mg.shootDistances}], default [${makeGun().shootDistances}]`);
   const m700 = 0.1 * BAL.dropInches(700, cases[0][1]) / 700 / 0.01047, m300 = 0.1 * BAL.dropInches(300, cases[0][1]) / 300 / 0.01047;
   ok('validity: 5.56 zeroed at 700 yd is model-dominated (refused); 300 yd is not', m700 > MODEL_MAX_MOA && m300 <= MODEL_MAX_MOA, `${m700.toFixed(1)} MOA vs ${m300.toFixed(1)} MOA, limit ${MODEL_MAX_MOA}`);
   const La = layoutFor(2.14, 'a4'); ok('layout: A4 computed from its own page size (narrower grid, taller band)', La.ok && near(La.CX / IN, 595.28 / 72 / 2, 1e-4) && La.GW < Lp.GW && La.GH > Lp.GH, `A4 CX ${(La.CX / IN).toFixed(3)} in, GW ${(La.GW / IN).toFixed(2)}, GH ${(La.GH / IN).toFixed(2)}`);
@@ -1660,6 +1726,11 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#setup-form').addEventListener('input', onSetupInput);
   $('#setup-form').addEventListener('change', e => { if (e.target.tagName === 'SELECT') onSetupInput(e); });
   $('#setup-form').addEventListener('click', onSetupSeg);
+  $('#setup-form').addEventListener('keydown', e => {
+    const g = activeGun(); if (!g) return;
+    if (e.target.id === 'f-dadd' && e.key === 'Enter') { e.preventDefault(); addDistance(g); }
+    else if (e.target.matches('[data-dist]') && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); selectDistance(g, +e.target.dataset.dist); }
+  });
   // print
   $('#paper').addEventListener('change', e => { db.settings.paper = e.target.value; saveDb(); renderInventory(); refreshDerived(true); });
   $('#make-pdf').addEventListener('click', e => { const g = activeGun(); if (g) generate([g], e.currentTarget); });
@@ -1671,8 +1742,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const pv = $('#preview-dlg');
   const openPreview = () => {
     if (pv.open) return;
-    const a = activeGun(), i = pvSet().findIndex(g => a && g.id === a.id);
-    pvIdx = i >= 0 ? i + 1 : 0;              // open on the active gun's page (cover is page 1)
+    const a = activeGun(), i = pvPages().findIndex(p => p.kind === 'target' && a && p.gun.id === a.id && Math.abs(p.d - a.previewDistance) < 0.01);
+    pvIdx = i >= 0 ? i : 0;                  // open on the previewed page (cover is page 1)
     pv.showModal(); renderModalPage();
   };
   const step = d => { pvIdx += d; renderModalPage(); };
