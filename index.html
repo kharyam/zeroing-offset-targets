@@ -171,6 +171,10 @@ a{color:inherit}
 .traj .sheet{fill:#fff;stroke:var(--ink);stroke-width:1}
 .traj .shadow{fill:rgba(20,24,28,.10)}
 .traj .dim{stroke:var(--ink-3);stroke-width:1}
+.traj .pick{cursor:pointer}
+.traj .pick:not(.on):hover .sheet,.traj .pick:not(.on):focus-visible .sheet{opacity:1;stroke:var(--accent);stroke-width:1.5}
+.traj .pick:not(.on):hover text{fill:var(--ink)}
+.traj .pick:focus{outline:none}
 .traj .grid{stroke:var(--rule-2);stroke-width:1}
 .traj-legend{display:flex;gap:1rem;flex-wrap:wrap;font-size:.72rem;color:var(--ink-2);margin-top:.5rem}
 .traj-legend i{display:inline-block;width:18px;height:0;border-top:2px solid var(--accent);vertical-align:middle;margin-right:.35rem}
@@ -1419,8 +1423,12 @@ function renderTrajectory(T) {
   paper.forEach((dd, i) => {
     const isP = Math.abs(dd - d) < 0.01;
     const off = isP ? T.offset : BAL.totalOffset(sh, Z, dd, T.load, hold);
+    const top = Y(half + hold), bot = Y(-half + hold);
+    // clickable: picking a page here switches the preview, same as the chips
+    s.push(`<g class="pick${isP ? ' on' : ''}" data-dist="${dd}" role="button" tabindex="0" aria-label="Preview the ${fmtYd(dd)} yd page"><title>Preview the ${fmtYd(dd)} yd page</title><rect x="${f(X(dd) - 34)}" y="${f(top - 40 - lifts[i])}" width="68" height="${f(bot - top + 62 + lifts[i])}" fill="transparent"/>`);
     sheet(X(dd), `${isP ? 'this page' : 'page'} · ${fmtYd(dd)} yd`, isP && T.layout.mode === 'combined' ? 'one mark: aim = impact' : `impact ${fmt2(Math.abs(off))} in ${dirWord(off)}`, isP, lifts[i]);
     s.push(isP ? dia(X(dd), Y(hold), 7) + ring(X(dd), Y(hold - off)) : `<g opacity=".45">${dia(X(dd), Y(hold), 5)}${ring(X(dd), Y(hold - off))}</g>`);
+    s.push('</g>');
   });
   // bullet path
   const path = pts.map((p, i) => `${i ? 'L' : 'M'}${f(X(p[0]))} ${f(Y(p[1]))}`).join(' ');
@@ -1792,6 +1800,9 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#setup-form').addEventListener('change', e => { if (e.target.tagName === 'SELECT') onSetupInput(e); });
   $('#setup-form').addEventListener('click', onSetupSeg);
   document.addEventListener('change', e => { if (e.target.matches('select.dsel')) { const g = activeGun(); if (g) selectDistance(g, +e.target.value); } });
+  // side view: click (or Enter) on a paper target to preview that page
+  $('#traj').addEventListener('click', e => { const p = e.target.closest('.pick[data-dist]'); const g = activeGun(); if (p && g) selectDistance(g, +p.dataset.dist); });
+  $('#traj').addEventListener('keydown', e => { const p = e.target.closest?.('.pick[data-dist]'); const g = activeGun(); if (p && g && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); selectDistance(g, +p.dataset.dist); } });
   $('#setup-form').addEventListener('keydown', e => {
     const g = activeGun(); if (!g) return;
     if (e.target.id === 'f-dadd' && e.key === 'Enter') { e.preventDefault(); addDistance(g); }
