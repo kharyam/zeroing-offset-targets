@@ -522,6 +522,8 @@ const BAL = (() => {
    ===================================================================== */
 const LOADS = [
   { id: '22lr',    cartridge: '.22 LR',            name: '40 gr high velocity', v0: 1250, bc: 0.138, refBarrel: 16,  fpsPerIn: 5,  range: [4, 24] },
+  { id: '22lr-sv', cartridge: '.22 LR',            name: '40 gr standard velocity', v0: 1070, bc: 0.125, refBarrel: 16, fpsPerIn: 3, range: [4, 24] },
+  { id: '22lr-hp', cartridge: '.22 LR',            name: '32 gr hyper velocity (Stinger)', v0: 1640, bc: 0.084, refBarrel: 16, fpsPerIn: 8, range: [4, 24] },
   { id: '556-55',  cartridge: '5.56 NATO / .223',  name: '55 gr FMJ',           v0: 3000, bc: 0.243, refBarrel: 16,  fpsPerIn: 30, range: [7.5, 20] },
   { id: '556-62',  cartridge: '5.56 NATO / .223',  name: '62 gr M855',          v0: 2950, bc: 0.304, refBarrel: 16,  fpsPerIn: 30, range: [7.5, 20] },
   { id: '556-77',  cartridge: '5.56 NATO / .223',  name: '77 gr OTM',           v0: 2700, bc: 0.372, refBarrel: 16,  fpsPerIn: 28, range: [7.5, 20] },
@@ -539,7 +541,7 @@ const LOADS = [
   { id: '4570-405', cartridge: '.45-70 Govt',      name: '405 gr cast (trapdoor-safe)', v0: 1350, bc: 0.280, refBarrel: 18.5, fpsPerIn: 15, range: [16, 24] },
 ];
 const SIGHT_PRESETS = {
-  rifle:   [{ h: 1.0, label: 'Lever-gun irons / ghost ring' }, { h: 1.5, label: 'Scout scope, low rings on a rail' }, { h: 2.4, label: 'Low mount' }, { h: 2.6, label: 'AR flat-top / absolute co-witness' }, { h: 2.9, label: '1.93 in cantilever' }, { h: 3.1, label: 'Tall mount' }],
+  rifle:   [{ h: 1.0, label: 'Lever-gun irons / ghost ring' }, { h: 1.5, label: 'Low rings on a rail (scout / rimfire scope)' }, { h: 2.4, label: 'Low mount' }, { h: 2.6, label: 'AR flat-top / absolute co-witness' }, { h: 2.9, label: '1.93 in cantilever' }, { h: 3.1, label: 'Tall mount' }],
   handgun: [{ h: 0.65, label: 'Iron sights (0.60–0.75)' }, { h: 1.0, label: 'Slide-mounted red dot (0.90–1.10)' }],
 };
 const CLICK_VALUES = [
@@ -1009,6 +1011,7 @@ function defaultDb() {
       makeGun({ name: '300 BLACKOUT', cartridge: 'SUPERSONIC', loadId: '300-125', defaultZero: 50, clickValue: '0.5moa' }),
       makeGun({ name: '300 BLACKOUT', cartridge: 'SUBSONIC', loadId: '300-220', defaultZero: 50, clickValue: '0.5moa' }),
       makeGun({ name: 'Ruger 1895 SBL', cartridge: '.45-70 Govt', loadId: '4570-325', sightHeight: 1.5, barrelLength: 18.5, defaultZero: 100, shootDistances: [10, 25, 50], clickValue: '0.25moa' }),
+      makeGun({ name: 'Ruger 10/22', cartridge: '.22 LR', loadId: '22lr', sightHeight: 1.5, barrelLength: 18.5, defaultZero: 50, shootDistances: [10, 25], clickValue: '0.25moa' }),
     ],
     calibration: { printer: '', x: 1, y: 1 },
     settings: { paper: 'letter', activeId: null, selected: [], scopeMag: 'auto' },
