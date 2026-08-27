@@ -1464,9 +1464,27 @@ function renderTrajectory(T) {
 }
 
 // ---- Through the scope: sight picture at a chosen range, held over by the computed holdover ----
-// Whitetail deer silhouette, broadside facing left, in INCHES with the origin on the vitals (heart/lung).
-const DEER_PATH = 'M-14,-9 C-19,-11 -23,-14 -26,-18 C-27,-20 -30,-21.5 -34,-20.5 L-37,-18.5 C-35.5,-16.5 -32,-16 -29,-16 C-26,-13 -22,-8 -19,-4 C-17,0 -16,4 -14,9 L-11,9 L-10,24 L-8,24 L-7,10 L-4,9 C4,11 12,11 16,9 L17,10 L18,24 L20,24 L20,9 C23,6 24,0 22,-6 C20,-10 8,-11 -4,-10 C-8,-10 -12,-10 -14,-9 Z M-28.5,-20.5 L-27.5,-26 L-24.5,-21.5 Z M22,-6 L25.5,-3.5 L22.5,-1 Z';
-const DEER_VITALS = [-6, 1], DEER_HOOF_Y = 24;
+// USPSA Classic C-zone steel: 11.75 x 17.75 in AR500 plate with the A-zone (4 x 11 in) painted on,
+// hung by chains from a stand. Inches, origin at the A-zone center (the hold point), y up.
+const PLATE = {
+  w: 11.75, h: 17.75, azone: [4, 11], barY: 14, legX: 8, centerAboveGround: 40,
+  poly: [[-2.6, 8.875], [2.6, 8.875], [5.875, 4.6], [5.875, -2.4], [2.9, -8.875], [-2.9, -8.875], [-5.875, -2.4], [-5.875, 4.6]],
+};
+function plateDefs(id) { return `<linearGradient id="steel-${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C8792"/><stop offset=".55" stop-color="#5B6672"/><stop offset="1" stop-color="#454D56"/></linearGradient>`; }
+function plateSvg(pxIn, groundIn, id) {
+  const q = v => Math.round(v * pxIn * 100) / 100, P = p => `${q(p[0])},${q(-p[1])}`;
+  const bar = Math.max(1, 0.9 * pxIn), chain = Math.max(0.8, 0.4 * pxIn);
+  return `<g>
+    <line x1="${q(-PLATE.legX)}" y1="${q(-PLATE.barY)}" x2="${q(-PLATE.legX - 2)}" y2="${q(groundIn)}" stroke="#3B434B" stroke-width="${bar}"/>
+    <line x1="${q(PLATE.legX)}" y1="${q(-PLATE.barY)}" x2="${q(PLATE.legX + 2)}" y2="${q(groundIn)}" stroke="#3B434B" stroke-width="${bar}"/>
+    <line x1="${q(-PLATE.legX)}" y1="${q(-PLATE.barY)}" x2="${q(PLATE.legX)}" y2="${q(-PLATE.barY)}" stroke="#3B434B" stroke-width="${bar}" stroke-linecap="round"/>
+    <line x1="${q(-2.2)}" y1="${q(-PLATE.barY)}" x2="${q(-2.2)}" y2="${q(-8.5)}" stroke="#5B6672" stroke-width="${chain}" stroke-dasharray="${q(0.7)} ${q(0.4)}"/>
+    <line x1="${q(2.2)}" y1="${q(-PLATE.barY)}" x2="${q(2.2)}" y2="${q(-8.5)}" stroke="#5B6672" stroke-width="${chain}" stroke-dasharray="${q(0.7)} ${q(0.4)}"/>
+    <polygon points="${PLATE.poly.map(P).join(' ')}" fill="url(#steel-${id})" stroke="#2A3138" stroke-width="${Math.max(0.6, 0.35 * pxIn)}" stroke-linejoin="round"/>
+    <rect x="${q(-PLATE.azone[0] / 2)}" y="${q(-PLATE.azone[1] / 2)}" width="${q(PLATE.azone[0])}" height="${q(PLATE.azone[1])}" fill="none" stroke="#F4F1EA" stroke-width="${Math.max(0.8, 0.35 * pxIn)}"/>
+    <rect x="${q(-0.35)}" y="${q(-8.1)}" width="${q(0.7)}" height="${q(0.7)}" fill="#EEF1F4"/>
+  </g>`;
+}
 const SCOPE_MAGS = [1, 2, 3, 4, 6, 8, 10, 12, 16, 20, 25];
 function scopeMaxYd(load) { let m = 200; for (let D = 250; D <= 1500; D += 50) { if (BAL.velocityAt(D, load) < 700) break; m = D; } return m; }
 function renderScope(T) {
@@ -1487,7 +1505,7 @@ function renderScope(T) {
   // (10.5 ft at 10x, 4.2 ft at 25x). Radius in MOA = 105 ft * 12 / 1.047 / 2 / mag.
   const R = 180, cx = 200, cy = 200;
   const fovRadiusMOA = mag => 105 * 12 / 1.047 / 2 / mag;
-  const fits = mag => { const r = fovRadiusMOA(mag) * 0.9; return holdMOA + 23 / moaIn <= r && Math.abs(holdMOA - 34 / moaIn) <= r && Math.abs(holdMOA) <= r; };
+  const fits = mag => { const r = fovRadiusMOA(mag) * 0.9; return holdMOA + 9 / moaIn <= r && Math.abs(holdMOA - 14 / moaIn) <= r && Math.abs(holdMOA) <= r; };
   const want = db.settings.scopeMag || 'auto';
   const mag = want === 'auto' ? ([...SCOPE_MAGS].reverse().find(fits) || 1) : +want;
   const fitsNow = fits(mag);
@@ -1500,13 +1518,13 @@ function renderScope(T) {
   magSel.options[0].textContent = want === 'auto' ? `Auto (${mag}×)` : 'Auto';
   const f = n => Math.round(n * 100) / 100;
   const s = [];
-  s.push(`<defs><clipPath id="scope-clip"><circle cx="${cx}" cy="${cy}" r="${R}"/></clipPath></defs>`);
+  s.push(`<defs><clipPath id="scope-clip"><circle cx="${cx}" cy="${cy}" r="${R}"/></clipPath>${plateDefs('a')}</defs>`);
   s.push(`<circle cx="${cx}" cy="${cy}" r="${R + 14}" fill="#14181C"/><circle cx="${cx}" cy="${cy}" r="${R + 6}" fill="#2A3138"/>`);
   s.push(`<g clip-path="url(#scope-clip)">`);
-  const horizon = ty + DEER_HOOF_Y * pxIn;
+  const horizon = ty + PLATE.centerAboveGround * pxIn;
   s.push(`<rect x="0" y="0" width="400" height="400" fill="#F4F7FA"/><rect x="0" y="${f(horizon)}" width="400" height="400" fill="#E2E7E1"/><line x1="0" y1="${f(horizon)}" x2="400" y2="${f(horizon)}" stroke="#C9D2CB" stroke-width="1"/>`);
-  // deer, scaled to its true angular size at D
-  s.push(`<g transform="translate(${f(cx - DEER_VITALS[0] * pxIn)} ${f(ty - DEER_VITALS[1] * pxIn)}) scale(${f(pxIn)})"><path d="${DEER_PATH}" fill="#5B6672" stroke="none"/></g>`);
+  // steel plate, scaled to its true angular size at D, A-zone centered on the hold point
+  s.push(`<g transform="translate(${cx} ${f(ty)})">${plateSvg(pxIn, PLATE.centerAboveGround, 'a')}</g>`);
   s.push(`<circle cx="${cx}" cy="${f(ty)}" r="${Math.max(2.2, 4 * pxIn)}" fill="none" stroke="#E4511C" stroke-width="1.4"/>`);
   // reticle: crosshair + numbered hashes (fine, so the target stays readable)
   s.push(`<g stroke="#14181C" stroke-width="1.4"><line x1="${cx - R}" y1="${cy}" x2="${cx + R}" y2="${cy}"/><line x1="${cx}" y1="${cy - R}" x2="${cx}" y2="${cy + R}"/></g>`);
@@ -1532,7 +1550,7 @@ function renderScope(T) {
   s.push(`<g id="scope-lever" transform="rotate(${f(theta)} ${cx} ${cy})" style="cursor:grab" tabindex="0" role="slider" aria-label="Magnification lever" aria-valuenow="${mag}"><title>Drag to set magnification · double-click for Auto</title><rect x="${cx - 4}" y="${cy - R - 30}" width="8" height="22" rx="2" fill="#2A3138"/><rect x="${cx - 3}" y="${cy - R - 28}" width="6" height="14" rx="1.5" fill="#E4511C"/><circle cx="${cx}" cy="${cy - R - 32}" r="5" fill="#E4511C" stroke="#14181C" stroke-width="1"/></g>`);
   const la = theta * Math.PI / 180, lr = R + 44;
   s.push(`<text x="${f(cx + lr * Math.sin(la))}" y="${f(cy - lr * Math.cos(la) + 3)}" font-size="10" font-weight="700" text-anchor="${theta < 15 || theta > 165 ? 'middle' : 'start'}" fill="#14181C" font-family="ui-monospace,Menlo,monospace">${mag}×</text>`);
-  s.push(`<text x="${cx}" y="424" font-size="9" text-anchor="middle" fill="#8793A0" font-family="Helvetica,Arial,sans-serif">${mag}× · field ${(105 / mag).toFixed(1)} ft at 100 yd · ${uLabel} hash every ${+(hash.toFixed(2))} · deer to scale at ${D} yd</text>`);
+  s.push(`<text x="${cx}" y="424" font-size="9" text-anchor="middle" fill="#8793A0" font-family="Helvetica,Arial,sans-serif">${mag}× · field ${(105 / mag).toFixed(1)} ft at 100 yd · ${uLabel} hash every ${+(hash.toFixed(2))} · ${PLATE.w} × ${PLATE.h} in AR500 plate to scale at ${D} yd</text>`);
   $('#scope').innerHTML = `<svg viewBox="-22 -26 444 462" role="img" aria-label="Sight picture at ${D} yards with holdover">${s.join('')}</svg>`;
   // lever interaction: drag sets a manual power, double-click returns to Auto
   const lever = $('#scope-lever');
@@ -1561,39 +1579,39 @@ function renderScope(T) {
     <div class="stat"><div class="k">Velocity</div><div class="v">${Math.round(v)} <small>fps</small>${speedTag}</div></div>
     <div class="stat"><div class="k">Time of flight</div><div class="v">${tof.toFixed(2)} <small>s</small></div></div>
     <div class="stat"><div class="k">1 MOA here</div><div class="v">${moaIn.toFixed(2)} <small>in</small></div></div>
-    <div class="stat"><div class="k">Deer vitals (10 in)</div><div class="v">${(10 / moaIn).toFixed(1)} <small>MOA · ${(10 / milIn).toFixed(2)} mil</small></div></div>`;
-  const where = Math.abs(D - Z) < 2.5 ? `at <b>${D} yd</b> — the zero — the bullet meets the crosshair` : `at <b>${D} yd</b> the bullet is ${fmt2(Math.abs(hIn))} in ${hIn >= 0 ? 'below' : 'above'} the crosshair, so you hold the reticle that far ${hIn >= 0 ? 'above' : 'below'} the vitals, or dial it`;
-  $('#scope-note').innerHTML = `The three-distance picture: zero set on paper at <b>${fmtYd(T.d)} yd</b>, dead-on at <b>${fmtYd(Z)} yd</b>, and ${where}. Shown at <b>${mag}×</b>${want === 'auto' ? ' (auto: the highest power that keeps the held-over deer in the field)' : ''}; the deer stands ${(33 / moaIn).toFixed(1)} MOA tall here.${fitsNow ? '' : ` <b>At ${mag}× the hold falls outside the field of view</b> — that is the point where you dial instead, or drop to a lower power.`} Flat-fire, standard atmosphere, no wind: confirm with real shots before you trust it on an animal.${v < 1340 ? ' Past the transonic zone the bullet gets unstable and the drop model gets worse — this is a rough picture, not DOPE.' : ''}`;
+    <div class="stat"><div class="k">A-zone (${PLATE.azone[0]} × ${PLATE.azone[1]} in)</div><div class="v">${(PLATE.azone[0] / moaIn).toFixed(1)} × ${(PLATE.azone[1] / moaIn).toFixed(1)} <small>MOA · plate ${(PLATE.h / moaIn).toFixed(1)} MOA tall</small></div></div>`;
+  const where = Math.abs(D - Z) < 2.5 ? `at <b>${D} yd</b> — the zero — the bullet meets the crosshair` : `at <b>${D} yd</b> the bullet is ${fmt2(Math.abs(hIn))} in ${hIn >= 0 ? 'below' : 'above'} the crosshair, so you hold the reticle that far ${hIn >= 0 ? 'above' : 'below'} the A-zone, or dial it`;
+  $('#scope-note').innerHTML = `The three-distance picture: zero set on paper at <b>${fmtYd(T.d)} yd</b>, dead-on at <b>${fmtYd(Z)} yd</b>, and ${where}. Shown at <b>${mag}×</b>${want === 'auto' ? ' (auto: the highest power that keeps the held-over plate in the field)' : ''}; the ${PLATE.w} × ${PLATE.h} in C-zone plate is ${(PLATE.h / moaIn).toFixed(1)} MOA tall here and its A-zone ${(PLATE.azone[0] / moaIn).toFixed(1)} MOA wide.${fitsNow ? '' : ` <b>At ${mag}× the hold falls outside the field of view</b> — that is the point where you dial instead, or drop to a lower power.`} Flat-fire, standard atmosphere, no wind: confirm on steel before you trust it.${v < 1340 ? ' Past the transonic zone the bullet gets unstable and the drop model gets worse — this is a rough picture, not DOPE.' : ''}`;
   renderScopeSide(T, D, hIn);
 }
-// Compact side view for the scope panel: muzzle → zero → the deer at D, arc landing in the vitals.
-// Vertical scale is inches, true to the deer's size; the sight line ends at the hold point above it.
+// Compact side view for the scope panel: muzzle → zero → the steel plate at D, arc landing in the A-zone.
+// Vertical scale is inches, true to the plate's size; the sight line ends at the hold point above it.
 function renderScopeSide(T, D, hIn) {
   const { Z, sh, hold } = T, load = T.load;
   const W = 520, H = 190, pl = 40, ptop = 22, pb = 40;
   const n = 90, pts = []; let hmin = Math.min(-sh, -hIn), hmax = 0;
   for (let i = 0; i <= n; i++) { const x = D * i / n; const h = BAL.heightVsLOS(sh, Z, x, load, hold); pts.push([x, h]); if (h < hmin) hmin = h; if (h > hmax) hmax = h; }
-  const vitalsIn = -hIn;                                  // bullet height vs the sight line at the deer
-  const ymin = Math.min(hmin, vitalsIn - DEER_HOOF_Y - 2) - 1, ymax = Math.max(hmax, vitalsIn + 34, 2) + 1;
+  const vitalsIn = -hIn;                                  // bullet height vs the sight line at the plate (A-zone center)
+  const ymin = Math.min(hmin, vitalsIn - PLATE.h / 2 - 3) - 1, ymax = Math.max(hmax, vitalsIn + PLATE.barY + 1, 2) + 1;
   const Y = inch => ptop + (ymax - inch) / (ymax - ymin) * (H - ptop - pb);
   const f = v => Math.round(v * 10) / 10, s = [];
   const pxIn = (H - ptop - pb) / (ymax - ymin);
-  const pr = 14 + 26 * pxIn;                              // room for the deer's rump (true scale) past the vitals
+  const pr = 14 + (PLATE.legX + 3) * pxIn;                // room for the stand (true scale) past the hold point
   const maxYd = D;
   const X = yd => pl + yd / maxYd * (W - pl - pr);
-  // ground under the deer, sight line, bore line
-  s.push(`<rect x="${pl}" y="${f(Y(vitalsIn - DEER_HOOF_Y))}" width="${W - pl - pr}" height="${f(H - pb - Y(vitalsIn - DEER_HOOF_Y))}" fill="#E2E7E1"/>`);
+  // ground strip (the stand's legs run down to it), sight line, bore line
+  s.push(`<defs>${plateDefs('b')}</defs><rect x="${pl}" y="${f(Y(ymin + 0.6))}" width="${W - pl - pr}" height="${f(H - pb - Y(ymin + 0.6))}" fill="#E2E7E1"/>`);
   s.push(`<line class="los" x1="${X(0)}" y1="${f(Y(0))}" x2="${f(X(D))}" y2="${f(Y(0))}"/>`);
   const bore = x => -sh + (x / Z) * (sh + T.dropZ + hold);
   s.push(`<line class="bore" x1="${X(0)}" y1="${f(Y(-sh))}" x2="${f(X(D))}" y2="${f(Y(bore(D)))}"/>`);
   s.push(`<rect x="${pl - 24}" y="${f(Y(-sh)) - 2}" width="26" height="4" rx="1" fill="#14181C"/><rect x="${pl - 20}" y="${f(Y(0)) - 3}" width="13" height="6" rx="1.5" fill="#14181C"/><line x1="${pl - 14}" y1="${f(Y(0))}" x2="${pl - 14}" y2="${f(Y(-sh))}" stroke="#14181C" stroke-width="2"/>`);
   // zero marker on the sight line
   if (Z < D) s.push(`<polygon points="${f(X(Z))},${f(Y(0)) - 5} ${f(X(Z)) + 5},${f(Y(0))} ${f(X(Z))},${f(Y(0)) + 5} ${f(X(Z)) - 5},${f(Y(0))}" fill="#14181C"/><text x="${f(X(Z))}" y="${f(Y(0)) - 9}" font-size="9" text-anchor="middle">zero · ${fmtYd(Z)} yd</text>`);
-  // deer at D, true scale, vitals where the bullet lands; crosshair point above it
-  s.push(`<g transform="translate(${f(X(D) - DEER_VITALS[0] * pxIn)} ${f(Y(vitalsIn) - DEER_VITALS[1] * pxIn)}) scale(${f(pxIn * 100) / 100})"><path d="${DEER_PATH}" fill="#5B6672"/></g>`);
+  // plate at D, true scale, A-zone where the bullet lands; crosshair point above it
+  s.push(`<g transform="translate(${f(X(D))} ${f(Y(vitalsIn))})">${plateSvg(pxIn, vitalsIn - ymin - 0.6, 'b')}</g>`);
   s.push(`<circle cx="${f(X(D))}" cy="${f(Y(vitalsIn))}" r="4" fill="none" stroke="#E4511C" stroke-width="1.8"/><circle cx="${f(X(D))}" cy="${f(Y(vitalsIn))}" r="1.2" fill="#E4511C"/>`);
   s.push(`<line x1="${f(X(D)) - 7}" y1="${f(Y(0))}" x2="${f(X(D)) + 7}" y2="${f(Y(0))}" stroke="#14181C" stroke-width="1.4"/><line x1="${f(X(D))}" y1="${f(Y(0)) - 7}" x2="${f(X(D))}" y2="${f(Y(0)) + 7}" stroke="#14181C" stroke-width="1.4"/>`);
-  if (Math.abs(hIn) > 0.05) s.push(`<line x1="${f(X(D)) - 40 * pxIn - 12}" y1="${f(Y(0))}" x2="${f(X(D)) - 40 * pxIn - 12}" y2="${f(Y(vitalsIn))}" stroke="#E4511C" stroke-width="1" stroke-dasharray="3 3"/><text x="${f(X(D)) - 40 * pxIn - 16}" y="${f((Y(0) + Y(vitalsIn)) / 2) + 3}" font-size="9" fill="#B23B0F" font-weight="700" text-anchor="end">${fmt2(Math.abs(hIn))} in</text>`);
+  if (Math.abs(hIn) > 0.05) s.push(`<line x1="${f(X(D)) - 12 * pxIn - 12}" y1="${f(Y(0))}" x2="${f(X(D)) - 12 * pxIn - 12}" y2="${f(Y(vitalsIn))}" stroke="#E4511C" stroke-width="1" stroke-dasharray="3 3"/><text x="${f(X(D)) - 12 * pxIn - 16}" y="${f((Y(0) + Y(vitalsIn)) / 2) + 3}" font-size="9" fill="#B23B0F" font-weight="700" text-anchor="end">${fmt2(Math.abs(hIn))} in</text>`);
   // bullet path
   s.push(`<path class="path" d="${pts.map((p, i) => `${i ? 'L' : 'M'}${f(X(p[0]))} ${f(Y(p[1]))}`).join(' ')}"/>`);
   // distance from the muzzle
