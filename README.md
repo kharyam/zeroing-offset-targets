@@ -2,6 +2,8 @@
 
 Print a rifle zeroing target for a short range that sets up a longer zero. At 10 yards the bullet hasn't crossed the line of sight yet, so it prints low; aim at the diamond, put the group on the circle, and you're on the trajectory that zeroes at 100.
 
+**Use it:** https://kharyam.github.io/zeroing-offset-targets/
+
 Single HTML file. Open `index.html` in a browser — no install, no server. It pulls jsPDF from a CDN the first time and works offline after that. Inventory lives in localStorage; export/import as JSON.
 
 ## What it does
