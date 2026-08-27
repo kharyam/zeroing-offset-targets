@@ -209,6 +209,13 @@ a{color:inherit}
 .chip-add{display:inline-flex;gap:.25rem;align-items:center}
 .chip-add input{width:5.4rem;height:30px;padding:0 .45rem;border:1px solid var(--rule);border-radius:3px;font-family:var(--mono);font-size:.85rem}
 .chip-add input:focus{border-color:var(--ink);outline:none}
+.chip-d .dot{width:9px;height:9px;border-radius:50%;border:1.5px solid currentColor;display:inline-block;box-sizing:border-box}
+.chip-d.on .dot{background:var(--accent);border-color:var(--accent)}
+.chip-add.closed input,.chip-add.closed .commit{display:none}
+.chip-add.open .opener{display:none}
+select.inline-sel{display:inline-block;height:26px;padding:0 1.4rem 0 .4rem;border:1px solid var(--rule);border-radius:3px;background:var(--sheet);font-weight:700;font-size:.85rem;color:var(--ink);vertical-align:baseline;cursor:pointer}
+select.inline-sel:hover{border-color:var(--ink-3)}
+#scope-side svg{width:100%;height:auto;display:block;margin-top:.7rem;border-top:1px solid var(--rule-2);padding-top:.5rem}
 
 .scope-ctl{display:flex;align-items:center;gap:.8rem;margin-bottom:.8rem}
 .scope-ctl label{font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);font-weight:600;white-space:nowrap}
@@ -331,7 +338,7 @@ dialog p{font-size:.85rem;color:var(--ink-2);margin-bottom:.9rem;line-height:1.5
       </div>
       <div class="scope-wrap">
         <div id="scope"></div>
-        <div><div id="scope-stats" class="stats"></div><div class="scope-note" id="scope-note"></div></div>
+        <div><div id="scope-stats" class="stats"></div><div class="scope-note" id="scope-note"></div><div id="scope-side"></div></div>
       </div>
     </section>
   </div>
@@ -345,6 +352,7 @@ dialog p{font-size:.85rem;color:var(--ink-2);margin-bottom:.9rem;line-height:1.5
           <div class="field"><label>Paper</label>
             <select id="paper"><option value="letter">Letter 8.5 × 11</option><option value="a4">A4 210 × 297</option></select></div>
           <div class="field"><label>Batch</label><div class="note" id="batch-note" style="padding-top:.45rem"></div></div>
+          <div class="field"><label for="thumb-dist">Page</label><select id="thumb-dist" class="dsel" aria-label="Which distance to preview"></select></div>
         </div>
         <div class="thumb" id="thumb" role="button" tabindex="0" title="Show the full-size page preview">
           <div class="thumb-sheet" id="thumb-sheet"></div>
@@ -757,9 +765,9 @@ function drawTarget(page, T) {
   // "hang at" banner, top right: the one thing that must not be mixed up between pages
   page.setFont('helvetica-bold', 13);
   const hangTxt = `HANG THIS TARGET AT ${fmtYd(T.d)} YARDS`, hangW = page.textWidth(hangTxt);
-  const bx0 = Wf - M - hangW - 16, bx1 = Wf - M, by0 = ftop - 22, by1 = ftop - 2;
+  const bx0 = Wf - M - hangW - 16, bx1 = Wf - M, by0 = ftop - 19.5, by1 = ftop + 0.5;   // centered on the title's cap height
   page.setLineWidth(1.4); hl(bx0, by0, bx1, by0); hl(bx0, by1, bx1, by1); hl(bx0, by0, bx0, by1); hl(bx1, by0, bx1, by1);
-  ht(bx0 + 8, ftop - 16.5, hangTxt);
+  ht(bx0 + 8, ftop - 14, hangTxt);
   if (T.calibStamp) { page.setFont('helvetica-bold', 6.5); const w = page.textWidth(T.calibStamp); ht(Wf - M - w, ftop + 4, T.calibStamp); }
   page.setFont('helvetica', 9.5);
   let x = M; const y1 = ftop - 29;
@@ -1143,9 +1151,9 @@ function renderSetup() {
       <div class="field"><label>&nbsp;</label><div class="note" id="est-note">${estimateNote(g)}</div></div>
     </div>
     <div class="subhead">Distances</div>
-    <div class="field"><label>Shoot this target at <span class="u">yd — one page per distance; click one to preview it</span></label>
-      <div class="chips" id="dist-chips">${g.shootDistances.map(d => `<span class="chip-d${Math.abs(d - g.previewDistance) < 0.01 ? ' on' : ''}" data-dist="${d}" role="button" tabindex="0">${fmtYd(d)} yd${g.shootDistances.length > 1 ? `<button type="button" class="x" data-dist-del="${d}" aria-label="Remove ${fmtYd(d)} yd" title="Remove">×</button>` : ''}</span>`).join('')}
-        <span class="chip-add"><input id="f-dadd" type="number" min="1" step="1" placeholder="add yd" aria-label="Add a shooting distance"><button type="button" id="f-dadd-btn" aria-label="Add distance" title="Add">+</button></span></div></div>
+    <div class="field"><label>Pages to print — shoot this target at <span class="u">${g.shootDistances.length > 1 ? 'select one to preview' : 'yd'}</span></label>
+      <div class="chips" id="dist-chips">${g.shootDistances.map(d => { const on = Math.abs(d - g.previewDistance) < 0.01; return `<span class="chip-d${on ? ' on' : ''}" data-dist="${d}" role="radio" aria-checked="${on}" tabindex="0" title="${on ? 'Previewing this page' : 'Preview this page'}"><span class="dot"></span>${fmtYd(d)} yd${g.shootDistances.length > 1 ? `<button type="button" class="chip-x" data-dist-del="${d}" aria-label="Remove the ${fmtYd(d)} yd page" title="Remove this page">×</button>` : ''}</span>`; }).join('')}
+        <span class="chip-add closed"><button type="button" class="btn small ghost opener" id="f-dadd-open">+ Add distance</button><input id="f-dadd" type="number" min="1" step="1" placeholder="yd" aria-label="New shooting distance in yards"><button type="button" class="btn small commit" id="f-dadd-btn">Add</button></span></div></div>
     <div class="row">
       ${fieldNum('f-z', 'Rifle zeroed at', g.defaultZero, '1', 'yd', 'min="1"')}
       <div class="field"><label for="f-click">Turret clicks</label><select id="f-click" data-f="clickValue">${CLICK_VALUES.map(c => `<option value="${c.id}" ${g.clickValue === c.id ? 'selected' : ''}>${c.label}</option>`).join('')}</select></div>
@@ -1214,12 +1222,27 @@ function addDistance(g) {
   if (!g.shootDistances.some(x => Math.abs(x - d) < 0.01)) g.shootDistances = [...g.shootDistances, d].sort((a, b) => a - b);
   g.previewDistance = d;
   saveDb(); renderSetup(); refreshInventoryRow(g); updateBatchState(); refreshDerived(false);
-  $('#f-dadd')?.focus();
+  $('#f-dadd-open')?.focus();
 }
 function selectDistance(g, d) {
   g.previewDistance = d; saveDb();
   for (const c of document.querySelectorAll('[data-dist]')) { const on = Math.abs(+c.dataset.dist - d) < 0.01; c.classList.toggle('on', on); c.setAttribute('aria-pressed', on); }
+  for (const s of document.querySelectorAll('select.dsel')) s.value = String(d);
   refreshDerived(false);
+}
+// Inline distance switcher: a <select> when the gun has several pages, plain text otherwise.
+function distSel(g, id) {
+  const ds = g.shootDistances || [g.previewDistance];
+  if (ds.length < 2) return `<b>${fmtYd(g.previewDistance)} yd</b>`;
+  return `<select class="dsel inline-sel" id="${id}" aria-label="Which page to preview">${ds.map(d => `<option value="${d}" ${Math.abs(d - g.previewDistance) < 0.01 ? 'selected' : ''}>${fmtYd(d)} yd</option>`).join('')}</select>`;
+}
+function syncThumbDist(g) {
+  const s = $('#thumb-dist'); if (!s) return;
+  const ds = g ? g.shootDistances : [];
+  const want = ds.map(d => `<option value="${d}">${fmtYd(d)} yd</option>`).join('');
+  if (s.innerHTML !== want) s.innerHTML = want;
+  if (g) s.value = String(g.previewDistance);
+  s.disabled = ds.length < 2;
 }
 function onSetupSeg(e) {
   const g0 = activeGun(); if (!g0) return;
@@ -1230,6 +1253,7 @@ function onSetupSeg(e) {
     return;
   }
   const chip = e.target.closest('[data-dist]'); if (chip) { selectDistance(g0, +chip.dataset.dist); return; }
+  if (e.target.closest('#f-dadd-open')) { const ca = $('.chip-add'); ca.classList.replace('closed', 'open'); $('#f-dadd').focus(); return; }
   if (e.target.closest('#f-dadd-btn')) { addDistance(g0); return; }
   const btn = e.target.closest('button[data-v]'); if (!btn) return;
   const segEl = btn.closest('[data-seg]'); const g = activeGun(); if (!segEl || !g) return;
@@ -1305,10 +1329,10 @@ function renderReadout(T) {
   } else if (L.mode === 'combined') {
     cls = 'onaim';
     big = `ON AIM<small>${fmt2(Math.abs(T.offset))}″ ${dirWord(T.offset).toUpperCase()}</small>`;
-    desc = `At <b>${fmtYd(T.d)} yd</b> the point of aim is the point of impact for a <b>${fmtYd(T.Z)} yd</b> zero — the computed offset is inside the mark itself. The target prints one combined mark.`;
+    desc = `At ${distSel(T.gun, 'ro-dist')} the point of aim is the point of impact for a <b>${fmtYd(T.Z)} yd</b> zero — the computed offset is inside the mark itself. The target prints one combined mark.`;
   } else {
     big = `${fmt2(Math.abs(T.offset))}″<small>${dirWord(T.offset).toUpperCase()}</small>`;
-    desc = `Aim at the diamond; groups must land <b>${fmt2(Math.abs(T.offset))} in ${dirWord(T.offset)}</b> at <b>${fmtYd(T.d)} yd</b> for a <b>${fmtYd(T.Z)} yd</b> zero with the sights <b>${fmtIn(T.sh)} in</b> over bore.${T.hold ? ` Includes your ${fmt2(T.hold)} in 6 o’clock hold.` : ''}`;
+    desc = `Aim at the diamond; groups must land <b>${fmt2(Math.abs(T.offset))} in ${dirWord(T.offset)}</b> at ${distSel(T.gun, 'ro-dist')} for a <b>${fmtYd(T.Z)} yd</b> zero with the sights <b>${fmtIn(T.sh)} in</b> over bore.${T.hold ? ` Includes your ${fmt2(T.hold)} in 6 o’clock hold.` : ''}`;
   }
   r.className = `readout ${cls}`;
   r.innerHTML = `<div class="big">${big}</div><div class="desc">${desc}</div>
@@ -1512,10 +1536,49 @@ function renderScope(T) {
     <div class="stat"><div class="k">Deer vitals (10 in)</div><div class="v">${(10 / moaIn).toFixed(1)} <small>MOA · ${(10 / milIn).toFixed(2)} mil</small></div></div>`;
   const where = Math.abs(D - Z) < 2.5 ? `at <b>${D} yd</b> — the zero — the bullet meets the crosshair` : `at <b>${D} yd</b> the bullet is ${fmt2(Math.abs(hIn))} in ${hIn >= 0 ? 'below' : 'above'} the crosshair, so you hold the reticle that far ${hIn >= 0 ? 'above' : 'below'} the vitals, or dial it`;
   $('#scope-note').innerHTML = `The three-distance picture: zero set on paper at <b>${fmtYd(T.d)} yd</b>, dead-on at <b>${fmtYd(Z)} yd</b>, and ${where}. Shown at <b>${mag}×</b>${want === 'auto' ? ' (auto: the highest power that keeps the held-over deer in the field)' : ''}; the deer stands ${(33 / moaIn).toFixed(1)} MOA tall here.${fitsNow ? '' : ` <b>At ${mag}× the hold falls outside the field of view</b> — that is the point where you dial instead, or drop to a lower power.`} Flat-fire, standard atmosphere, no wind: confirm with real shots before you trust it on an animal.${v < 1340 ? ' Past the transonic zone the bullet gets unstable and the drop model gets worse — this is a rough picture, not DOPE.' : ''}`;
+  renderScopeSide(T, D, hIn);
+}
+// Compact side view for the scope panel: muzzle → zero → the deer at D, arc landing in the vitals.
+// Vertical scale is inches, true to the deer's size; the sight line ends at the hold point above it.
+function renderScopeSide(T, D, hIn) {
+  const { Z, sh, hold } = T, load = T.load;
+  const W = 520, H = 190, pl = 40, ptop = 22, pb = 40;
+  const n = 90, pts = []; let hmin = Math.min(-sh, -hIn), hmax = 0;
+  for (let i = 0; i <= n; i++) { const x = D * i / n; const h = BAL.heightVsLOS(sh, Z, x, load, hold); pts.push([x, h]); if (h < hmin) hmin = h; if (h > hmax) hmax = h; }
+  const vitalsIn = -hIn;                                  // bullet height vs the sight line at the deer
+  const ymin = Math.min(hmin, vitalsIn - DEER_HOOF_Y - 2) - 1, ymax = Math.max(hmax, vitalsIn + 34, 2) + 1;
+  const Y = inch => ptop + (ymax - inch) / (ymax - ymin) * (H - ptop - pb);
+  const f = v => Math.round(v * 10) / 10, s = [];
+  const pxIn = (H - ptop - pb) / (ymax - ymin);
+  const pr = 14 + 26 * pxIn;                              // room for the deer's rump (true scale) past the vitals
+  const maxYd = D;
+  const X = yd => pl + yd / maxYd * (W - pl - pr);
+  // ground under the deer, sight line, bore line
+  s.push(`<rect x="${pl}" y="${f(Y(vitalsIn - DEER_HOOF_Y))}" width="${W - pl - pr}" height="${f(H - pb - Y(vitalsIn - DEER_HOOF_Y))}" fill="#E2E7E1"/>`);
+  s.push(`<line class="los" x1="${X(0)}" y1="${f(Y(0))}" x2="${f(X(D))}" y2="${f(Y(0))}"/>`);
+  const bore = x => -sh + (x / Z) * (sh + T.dropZ + hold);
+  s.push(`<line class="bore" x1="${X(0)}" y1="${f(Y(-sh))}" x2="${f(X(D))}" y2="${f(Y(bore(D)))}"/>`);
+  s.push(`<rect x="${pl - 24}" y="${f(Y(-sh)) - 2}" width="26" height="4" rx="1" fill="#14181C"/><rect x="${pl - 20}" y="${f(Y(0)) - 3}" width="13" height="6" rx="1.5" fill="#14181C"/><line x1="${pl - 14}" y1="${f(Y(0))}" x2="${pl - 14}" y2="${f(Y(-sh))}" stroke="#14181C" stroke-width="2"/>`);
+  // zero marker on the sight line
+  if (Z < D) s.push(`<polygon points="${f(X(Z))},${f(Y(0)) - 5} ${f(X(Z)) + 5},${f(Y(0))} ${f(X(Z))},${f(Y(0)) + 5} ${f(X(Z)) - 5},${f(Y(0))}" fill="#14181C"/><text x="${f(X(Z))}" y="${f(Y(0)) - 9}" font-size="9" text-anchor="middle">zero · ${fmtYd(Z)} yd</text>`);
+  // deer at D, true scale, vitals where the bullet lands; crosshair point above it
+  s.push(`<g transform="translate(${f(X(D) - DEER_VITALS[0] * pxIn)} ${f(Y(vitalsIn) - DEER_VITALS[1] * pxIn)}) scale(${f(pxIn * 100) / 100})"><path d="${DEER_PATH}" fill="#5B6672"/></g>`);
+  s.push(`<circle cx="${f(X(D))}" cy="${f(Y(vitalsIn))}" r="4" fill="none" stroke="#E4511C" stroke-width="1.8"/><circle cx="${f(X(D))}" cy="${f(Y(vitalsIn))}" r="1.2" fill="#E4511C"/>`);
+  s.push(`<line x1="${f(X(D)) - 7}" y1="${f(Y(0))}" x2="${f(X(D)) + 7}" y2="${f(Y(0))}" stroke="#14181C" stroke-width="1.4"/><line x1="${f(X(D))}" y1="${f(Y(0)) - 7}" x2="${f(X(D))}" y2="${f(Y(0)) + 7}" stroke="#14181C" stroke-width="1.4"/>`);
+  if (Math.abs(hIn) > 0.05) s.push(`<line x1="${f(X(D)) - 40 * pxIn - 12}" y1="${f(Y(0))}" x2="${f(X(D)) - 40 * pxIn - 12}" y2="${f(Y(vitalsIn))}" stroke="#E4511C" stroke-width="1" stroke-dasharray="3 3"/><text x="${f(X(D)) - 40 * pxIn - 16}" y="${f((Y(0) + Y(vitalsIn)) / 2) + 3}" font-size="9" fill="#B23B0F" font-weight="700" text-anchor="end">${fmt2(Math.abs(hIn))} in</text>`);
+  // bullet path
+  s.push(`<path class="path" d="${pts.map((p, i) => `${i ? 'L' : 'M'}${f(X(p[0]))} ${f(Y(p[1]))}`).join(' ')}"/>`);
+  // distance from the muzzle
+  const yy = H - 14;
+  s.push(`<line class="dim" x1="${X(0)}" y1="${yy}" x2="${f(X(D))}" y2="${yy}"/><line class="dim" x1="${X(0)}" y1="${yy - 5}" x2="${X(0)}" y2="${yy + 5}"/><line class="dim" x1="${f(X(D))}" y1="${yy - 5}" x2="${f(X(D))}" y2="${yy + 5}"/>`);
+  s.push(`<rect x="${f((X(0) + X(D)) / 2 - 26)}" y="${yy - 7}" width="52" height="14" fill="#fff"/><text x="${f((X(0) + X(D)) / 2)}" y="${yy + 4}" font-size="10" text-anchor="middle" class="mono" font-weight="700" fill="#14181C">${D} yd</text>`);
+  s.push(`<text x="${W - pr}" y="${ptop - 8}" font-size="9" text-anchor="end">side view · inches vs. yards, not to scale</text>`);
+  $('#scope-side').innerHTML = `<svg class="traj" viewBox="0 0 ${W} ${H}" role="img" aria-label="Side view of the shot to ${D} yards">${s.join('')}</svg>`;
 }
 // The Print-panel thumbnail always mirrors the active gun's page. The modal shows whatever page
 // of the would-be PDF is selected (cover, then one page per batch-selected gun).
 function renderPreview(T) {
+  syncThumbDist(T.gun);
   const v = pageView(T), th = $('#thumb-sheet');
   th.className = 'thumb-sheet' + (v.landscape ? ' landscape' : '');
   th.innerHTML = v.html;
@@ -1726,9 +1789,11 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#setup-form').addEventListener('input', onSetupInput);
   $('#setup-form').addEventListener('change', e => { if (e.target.tagName === 'SELECT') onSetupInput(e); });
   $('#setup-form').addEventListener('click', onSetupSeg);
+  document.addEventListener('change', e => { if (e.target.matches('select.dsel')) { const g = activeGun(); if (g) selectDistance(g, +e.target.value); } });
   $('#setup-form').addEventListener('keydown', e => {
     const g = activeGun(); if (!g) return;
     if (e.target.id === 'f-dadd' && e.key === 'Enter') { e.preventDefault(); addDistance(g); }
+    else if (e.target.id === 'f-dadd' && e.key === 'Escape') { e.preventDefault(); e.target.value = ''; $('.chip-add').classList.replace('open', 'closed'); $('#f-dadd-open').focus(); }
     else if (e.target.matches('[data-dist]') && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); selectDistance(g, +e.target.dataset.dist); }
   });
   // print
