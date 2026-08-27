@@ -1,0 +1,1709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zeroing Offset Target Generator</title>
+<!-- jsPDF from CDN. The browser caches it after the first online load; nothing else leaves this page. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
+<style>
+/* ---------- tokens ---------- */
+:root{
+  --paper:#F1F4F7;        /* drafting vellum, cool not cream */
+  --sheet:#FFFFFF;
+  --ink:#14181C;
+  --ink-2:#4A5560;
+  --ink-3:#8793A0;
+  --rule:#D3DAE1;
+  --rule-2:#E7ECF0;
+  --grid:rgba(60,95,140,.075);
+  --accent:#E4511C;        /* safety orange: impact + warnings only */
+  --accent-ink:#B23B0F;
+  --accent-soft:#FDEFE7;
+  --ok:#2C7A4B;
+  --ok-soft:#E6F3EB;
+  --focus:#1F5FBF;
+  --sans:"Helvetica Neue",Helvetica,Arial,"Liberation Sans",sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono","DejaVu Sans Mono",monospace;
+  --ease:cubic-bezier(.22,.61,.36,1);
+  --t:220ms;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{font-size:15px}
+body{
+  font-family:var(--sans);color:var(--ink);background:var(--paper);
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:24px 24px;background-position:-1px -1px;
+  line-height:1.4;-webkit-font-smoothing:antialiased;min-height:100vh;
+}
+button,input,select{font:inherit;color:inherit}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.eyebrow{font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+h1,h2,h3{font-weight:700;letter-spacing:-.01em}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+/* ---------- top bar ---------- */
+.topbar{
+  position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);backdrop-filter:blur(6px);
+  border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:1.25rem;padding:.7rem 1.25rem;
+}
+.brand{display:flex;flex-direction:column;line-height:1.1}
+.brand b{font-size:1rem;letter-spacing:.06em;text-transform:uppercase}
+.brand span{font-size:.72rem;color:var(--ink-2)}
+.brand-mark{width:30px;height:30px;flex:none;margin-right:-.25rem}
+.topbar .spacer{flex:1}
+.chip{
+  display:inline-flex;align-items:center;gap:.4rem;padding:.25rem .6rem;border:1px solid var(--rule);
+  border-radius:999px;font-size:.72rem;color:var(--ink-2);background:var(--sheet);white-space:nowrap
+}
+.chip .dot{width:7px;height:7px;border-radius:50%;background:var(--ink-3)}
+.chip.ok .dot{background:var(--ok)}
+.chip.bad{border-color:var(--accent);color:var(--accent-ink)}
+.chip.bad .dot{background:var(--accent)}
+.chip.clickable{cursor:pointer}
+.chip.clickable:hover{border-color:var(--ink-3)}
+
+/* ---------- layout ---------- */
+.app{display:grid;grid-template-columns:330px minmax(0,1fr) 330px;gap:1.1rem;padding:1.1rem 1.25rem 3rem;max-width:1680px;margin:0 auto}
+.col{display:flex;flex-direction:column;gap:1.1rem;min-width:0}
+@media (max-width:1240px){.app{grid-template-columns:320px minmax(0,1fr)}.col-tools{grid-column:1/-1;flex-direction:row;flex-wrap:wrap}.col-tools>.panel{flex:1 1 320px}}
+@media (max-width:820px){.app{grid-template-columns:1fr;padding:.8rem}.col-tools{flex-direction:column}}
+
+.panel{background:var(--sheet);border:1px solid var(--rule);border-radius:4px;padding:1rem 1.05rem}
+.panel-head{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;margin-bottom:.8rem}
+.panel-head h2{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
+.panel-head .hint{font-size:.72rem;color:var(--ink-3)}
+
+/* ---------- inventory ---------- */
+.gun-list{display:flex;flex-direction:column;gap:.35rem}
+.gun{
+  position:relative;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.6rem;
+  padding:.55rem .6rem .55rem .8rem;border:1px solid transparent;border-radius:3px;cursor:pointer;
+  transition:background var(--t) var(--ease),transform var(--t) var(--ease),border-color var(--t) var(--ease);
+}
+.gun::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:3px;background:var(--accent);border-radius:2px;transform:scaleY(0);transition:transform var(--t) var(--ease)}
+.gun:hover{background:var(--paper);transform:translateX(2px)}
+.gun.active{background:var(--paper);border-color:var(--rule)}
+.gun.active::before{transform:scaleY(1)}
+.gun input[type=checkbox]{width:15px;height:15px;accent-color:var(--ink)}
+.gun .gname{font-weight:700;font-size:.92rem;line-height:1.2}
+.gun .gsub{font-size:.72rem;color:var(--ink-2);margin-top:.1rem}
+.gun .gsub .lowhigh{color:var(--accent-ink);font-weight:600}
+.gun .gsub .onaim{color:var(--ok);font-weight:600}
+.gun .gdel{opacity:0;border:0;background:none;color:var(--ink-3);cursor:pointer;font-size:1rem;line-height:1;padding:.2rem .3rem;border-radius:3px;transition:opacity var(--t)}
+.gun:hover .gdel,.gun.active .gdel{opacity:1}
+.gun .gdel:hover{color:var(--accent-ink);background:var(--accent-soft)}
+.inv-actions{display:flex;gap:.4rem;margin-top:.8rem;flex-wrap:wrap}
+.empty{padding:1rem;border:1px dashed var(--rule);border-radius:4px;color:var(--ink-2);font-size:.85rem;text-align:center}
+
+/* ---------- forms ---------- */
+.field{display:flex;flex-direction:column;gap:.25rem;min-width:0}
+.field label{font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);font-weight:600;display:flex;justify-content:space-between;gap:.5rem}
+.field label .u{color:var(--ink-3);letter-spacing:0;text-transform:none;font-weight:400}
+.field input,.field select{
+  height:34px;padding:0 .55rem;border:1px solid var(--rule);border-radius:3px;background:var(--sheet);
+  font-family:var(--mono);font-size:.88rem;transition:border-color var(--t),box-shadow var(--t);width:100%;
+}
+.field input.text{font-family:var(--sans)}
+.field select{font-family:var(--sans);font-size:.85rem}
+.field input:focus,.field select:focus{border-color:var(--ink);box-shadow:0 0 0 3px rgba(20,24,28,.08);outline:none}
+.field input.est{border-style:dashed;border-color:var(--accent);color:var(--accent-ink)}
+.row{display:grid;gap:.6rem;grid-template-columns:1fr 1fr}
+.row-3{grid-template-columns:1fr 1fr 1fr}
+.form{display:flex;flex-direction:column;gap:.75rem}
+.subhead{font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:700;margin-top:.35rem;padding-top:.7rem;border-top:1px solid var(--rule-2)}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:3px;overflow:hidden;width:100%}
+.seg button{flex:1;height:32px;border:0;background:var(--sheet);font-size:.8rem;cursor:pointer;color:var(--ink-2);transition:background var(--t),color var(--t)}
+.seg button+button{border-left:1px solid var(--rule)}
+.seg button.on{background:var(--ink);color:#fff}
+.note{font-size:.76rem;color:var(--ink-2);line-height:1.45}
+.note.est{color:var(--accent-ink)}
+.note b{font-weight:700}
+
+/* ---------- buttons ---------- */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:.45rem;height:36px;padding:0 .9rem;border:1px solid var(--ink);
+  background:var(--ink);color:#fff;border-radius:3px;font-size:.85rem;font-weight:600;cursor:pointer;white-space:nowrap;
+  transition:transform var(--t) var(--ease),background var(--t),box-shadow var(--t),border-color var(--t);
+}
+.btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(20,24,28,.15)}
+.btn:active{transform:translateY(0);box-shadow:none}
+.btn.ghost{background:var(--sheet);color:var(--ink);border-color:var(--rule)}
+.btn.ghost:hover{border-color:var(--ink-3)}
+.btn.accent{background:var(--accent);border-color:var(--accent)}
+.btn.small{height:30px;padding:0 .65rem;font-size:.78rem}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
+.btn.done{animation:pulse .6s var(--ease)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(44,122,75,.5)}100%{box-shadow:0 0 0 14px rgba(44,122,75,0)}}
+.btn.big{height:44px;font-size:.95rem;width:100%}
+
+/* ---------- readout ---------- */
+.readout{display:grid;grid-template-columns:auto 1fr;gap:1.2rem;align-items:center}
+.readout .big{font-family:var(--mono);font-size:3.4rem;font-weight:700;line-height:1;letter-spacing:-.03em;color:var(--accent-ink);white-space:nowrap;font-variant-numeric:tabular-nums}
+.readout .big small{font-family:var(--sans);font-size:.95rem;letter-spacing:.14em;font-weight:700;vertical-align:.35em;margin-left:.4rem;color:var(--ink)}
+.readout.onaim .big{color:var(--ok)}
+.readout.refused .big{color:var(--ink-3);font-size:2rem}
+.readout .desc{font-size:.9rem;color:var(--ink-2);line-height:1.5}
+.readout .desc b{color:var(--ink)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:.6rem;margin-top:1rem;padding-top:.9rem;border-top:1px solid var(--rule-2)}
+.stat .k{font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
+.stat .v{font-family:var(--mono);font-size:.95rem;font-weight:600;margin-top:.1rem}
+.stat .v small{font-size:.7rem;color:var(--ink-3);font-weight:400;font-family:var(--sans)}
+
+.warn{display:flex;gap:.6rem;padding:.6rem .75rem;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 3px 3px 0;font-size:.8rem;line-height:1.45;color:var(--ink)}
+.warn.calm{border-color:var(--ok);background:var(--ok-soft)}
+.warn.neutral{border-color:var(--ink-3);background:var(--paper)}
+.warn b{font-weight:700}
+.warn svg{flex:none;width:16px;height:16px;margin-top:.1rem}
+.warn-stack{display:flex;flex-direction:column;gap:.5rem;margin-top:.9rem}
+.warn-stack:empty{display:none}
+
+/* ---------- trajectory ---------- */
+.traj{width:100%;height:auto;display:block}
+.traj text{font-family:var(--sans);fill:var(--ink-2)}
+.traj .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.traj .path{fill:none;stroke:var(--accent);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.traj .path.draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw 1.1s var(--ease) forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+.traj .los{stroke:var(--ink);stroke-width:1;stroke-dasharray:4 4}
+.traj .bore{stroke:var(--ink-3);stroke-width:1}
+.traj .sheet{fill:#fff;stroke:var(--ink);stroke-width:1}
+.traj .shadow{fill:rgba(20,24,28,.10)}
+.traj .dim{stroke:var(--ink-3);stroke-width:1}
+.traj .grid{stroke:var(--rule-2);stroke-width:1}
+.traj-legend{display:flex;gap:1rem;flex-wrap:wrap;font-size:.72rem;color:var(--ink-2);margin-top:.5rem}
+.traj-legend i{display:inline-block;width:18px;height:0;border-top:2px solid var(--accent);vertical-align:middle;margin-right:.35rem}
+.traj-legend i.los{border-top:1px dashed var(--ink)}
+.traj-legend i.bore{border-top:1px solid var(--ink-3)}
+
+/* ---------- print thumbnail + preview modal ---------- */
+.thumb{display:block;cursor:zoom-in;border:1px solid var(--rule);border-radius:4px;padding:.7rem .7rem .5rem;background:var(--paper);transition:border-color var(--t),transform var(--t) var(--ease),box-shadow var(--t)}
+.thumb:hover{border-color:var(--ink-3);transform:translateY(-1px);box-shadow:0 8px 20px -10px rgba(20,24,28,.4)}
+.thumb-sheet{background:#fff;box-shadow:0 1px 2px rgba(20,24,28,.15),0 10px 22px -12px rgba(20,24,28,.45);width:100%;margin:0 auto}
+.thumb-sheet svg{display:block;width:100%;height:auto}
+.thumb-cap{display:flex;justify-content:space-between;gap:.5rem;margin-top:.55rem;font-size:.72rem;color:var(--ink-2)}
+.thumb-link{color:var(--accent-ink);font-weight:700;white-space:nowrap}
+.preview-dlg{max-width:96vw;width:fit-content;min-width:min(560px,96vw);padding:0;border-radius:6px;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);margin:0}
+.preview-dlg[open]{animation:dlgfade 220ms var(--ease)}
+@keyframes dlgfade{from{opacity:0}to{opacity:1}}
+.pv-head{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:.65rem 1rem;border-bottom:1px solid var(--rule)}
+.pv-head b{font-size:.9rem;margin-right:.6rem}
+.pv-nav{display:inline-flex;align-items:center;gap:.25rem;margin-right:.5rem}
+.pv-nav .num{min-width:3.6ch;text-align:center;font-size:.8rem;font-weight:700}
+.pv-nav .btn{padding:0 .5rem}
+.pv-body{padding:1.1rem;background:var(--paper);display:flex;justify-content:center}
+.pv-body .sheet-box{max-width:none;width:auto}
+.pv-body .sheet-box svg{height:min(80vh,1150px);width:auto;max-width:90vw}
+.pv-foot{padding:.45rem 1rem;font-size:.72rem;color:var(--ink-3);border-top:1px solid var(--rule)}
+
+/* ---------- scope view ---------- */
+.scope-ctl{display:flex;align-items:center;gap:.8rem;margin-bottom:.8rem}
+.scope-ctl label{font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);font-weight:600;white-space:nowrap}
+.scope-ctl input[type=range]{flex:1;accent-color:var(--accent);height:28px;cursor:pointer}
+.scope-ctl .num{font-weight:700;min-width:6ch;text-align:right;font-size:1rem}
+.scope-ctl .lim{font-size:.68rem;color:var(--ink-3);white-space:nowrap}
+.scope-ctl select{height:30px;padding:0 .4rem;border:1px solid var(--rule);border-radius:3px;background:var(--sheet);font-size:.8rem}
+.scope-wrap{display:grid;grid-template-columns:minmax(240px,400px) 1fr;gap:1.1rem;align-items:start}
+@media (max-width:640px){.scope-wrap{grid-template-columns:1fr}}
+.scope-wrap svg{width:100%;height:auto;display:block}
+.scope-wrap .stats{margin-top:0;padding-top:0;border-top:0;grid-template-columns:1fr 1fr}
+.tag{display:inline-block;padding:.05rem .4rem;border-radius:999px;font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;font-weight:700;background:var(--paper);color:var(--ink-2);margin-left:.3rem;vertical-align:middle;font-family:var(--sans)}
+.tag.warn{background:var(--accent-soft);color:var(--accent-ink)}
+.scope-note{font-size:.76rem;color:var(--ink-2);line-height:1.45;margin-top:.7rem}
+
+/* ---------- preview ---------- */
+.preview-wrap{display:flex;justify-content:center;padding:1rem;background:var(--paper);border:1px solid var(--rule-2);border-radius:4px}
+.sheet-box{width:100%;max-width:640px;background:#fff;box-shadow:0 1px 2px rgba(20,24,28,.12),0 18px 44px -18px rgba(20,24,28,.35);transition:max-width 360ms var(--ease)}
+.sheet-box.landscape{max-width:820px}
+.sheet-box svg{display:block;width:100%;height:auto}
+.refused-box{padding:2rem 1.5rem;text-align:center;color:var(--ink-2);font-size:.9rem;line-height:1.5}
+.refused-box b{display:block;font-size:1.05rem;color:var(--ink);margin-bottom:.4rem}
+
+/* ---------- calculator ---------- */
+.form.compact{gap:.5rem}
+.calc-result{margin-top:.15rem;padding:.4rem .7rem;border:1px solid var(--rule);border-radius:3px;background:var(--paper)}
+.calc-result .dir{display:grid;grid-template-columns:5.2rem 1fr auto;align-items:baseline;gap:.5rem;padding:.2rem 0;border-bottom:1px solid var(--rule-2)}
+.calc-result .dir:last-of-type{border-bottom:0}
+.calc-result .clicks{font-family:var(--mono);font-size:1.1rem;font-weight:700;letter-spacing:-.02em;white-space:nowrap}
+.calc-result .clicks span{font-family:var(--sans);font-size:.66rem;letter-spacing:.12em;font-weight:700;margin-left:.3rem;color:var(--ink-2)}
+.calc-result .ang{font-family:var(--mono);font-size:.7rem;color:var(--ink-2);white-space:nowrap}
+.res-line{display:flex;justify-content:space-between;font-size:.72rem;color:var(--ink-2);margin-top:.35rem}
+.res-line b{font-family:var(--mono);color:var(--ink)}
+.calc-result .warn{margin-top:.45rem;padding:.4rem .6rem;font-size:.74rem}
+
+/* ---------- misc ---------- */
+.kv{display:flex;justify-content:space-between;font-size:.8rem;padding:.3rem 0;border-bottom:1px solid var(--rule-2)}
+.kv:last-child{border-bottom:0}
+.kv b{font-family:var(--mono)}
+.stack{display:flex;flex-direction:column;gap:.6rem}
+.inline{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.pdf-banner{display:none;margin:0 1.25rem;padding:.6rem .9rem;border:1px solid var(--accent);background:var(--accent-soft);border-radius:4px;font-size:.82rem}
+.pdf-banner.show{display:block}
+dialog{border:1px solid var(--rule);border-radius:6px;padding:0;max-width:560px;width:calc(100% - 2rem);box-shadow:0 30px 60px -20px rgba(20,24,28,.4)}
+dialog::backdrop{background:rgba(20,24,28,.35);backdrop-filter:blur(2px)}
+dialog .dlg{padding:1.2rem 1.3rem}
+dialog h3{font-size:1rem;margin-bottom:.4rem}
+dialog p{font-size:.85rem;color:var(--ink-2);margin-bottom:.9rem;line-height:1.5}
+.selftest{font-family:var(--mono);font-size:.74rem;white-space:pre-wrap;background:var(--paper);padding:.7rem;border-radius:3px;max-height:320px;overflow:auto;line-height:1.5}
+.selftest .p{color:var(--ok)}.selftest .f{color:var(--accent-ink);font-weight:700}
+.fade-in{animation:fadein 320ms var(--ease)}
+@keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.footer-note{padding:0 1.25rem 2rem;font-size:.72rem;color:var(--ink-3);max-width:1680px;margin:0 auto}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <svg class="brand-mark" viewBox="0 0 30 30" aria-hidden="true">
+    <rect x="1" y="1" width="28" height="28" fill="none" stroke="#14181C" stroke-width="1.2"/>
+    <path d="M15 5 L21 11 L15 17 L9 11 Z" fill="#14181C"/>
+    <circle cx="15" cy="11" r="1.3" fill="#fff"/>
+    <circle cx="15" cy="22" r="3" fill="none" stroke="#E4511C" stroke-width="1.6"/>
+    <circle cx="15" cy="22" r=".9" fill="#E4511C"/>
+  </svg>
+  <div class="brand"><b>Zeroing Offset</b><span>Short-range target generator</span></div>
+  <div class="spacer"></div>
+  <span id="selftest-chip" class="chip clickable" title="Math self-test against the spec's golden vectors"><span class="dot"></span><span>self-test…</span></span>
+  <span id="pdf-chip" class="chip"><span class="dot"></span><span>PDF engine…</span></span>
+</header>
+<div id="pdf-banner" class="pdf-banner"></div>
+
+<main class="app">
+  <!-- ================= LEFT: inventory + setup ================= -->
+  <div class="col">
+    <section class="panel">
+      <div class="panel-head"><h2>Inventory</h2><span class="hint">tick guns to batch</span></div>
+      <div id="gun-list" class="gun-list"></div>
+      <div class="inv-actions">
+        <button class="btn small" id="add-gun">+ Add firearm</button>
+        <button class="btn small ghost" id="export-json">Export JSON</button>
+        <button class="btn small ghost" id="import-json">Import JSON</button>
+        <input type="file" id="import-file" accept="application/json,.json" hidden>
+      </div>
+    </section>
+
+    <section class="panel" id="setup-panel">
+      <div class="panel-head"><h2>Setup</h2><span class="hint" id="setup-hint"></span></div>
+      <div id="setup-form" class="form"></div>
+    </section>
+  </div>
+
+  <!-- ================= CENTER: readout, trajectory, preview ================= -->
+  <div class="col">
+    <section class="panel" id="readout-panel">
+      <div id="readout"></div>
+      <div id="warnings" class="warn-stack"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Side view</h2><span class="hint">vertical in inches, range in yards — not to scale</span></div>
+      <div id="traj"></div>
+      <div class="traj-legend">
+        <span><i></i>bullet path</span><span><i class="los"></i>line of sight</span><span><i class="bore"></i>bore line</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Through the scope</h2><span class="hint">holdover past your zero — no wind, no spin drift</span></div>
+      <div class="scope-ctl">
+        <label for="scope-yd">Target at</label>
+        <span class="lim" id="scope-min"></span>
+        <input type="range" id="scope-yd" min="100" max="1000" step="5" value="300" aria-label="Target distance in yards">
+        <span class="lim" id="scope-max"></span>
+        <span class="num" id="scope-yd-out"></span>
+        <select id="scope-mag" aria-label="Magnification"></select>
+      </div>
+      <div class="scope-wrap">
+        <div id="scope"></div>
+        <div><div id="scope-stats" class="stats"></div><div class="scope-note" id="scope-note"></div></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ================= RIGHT: output, click calculator, calibration ================= -->
+  <div class="col col-tools">
+    <section class="panel">
+      <div class="panel-head"><h2>Print</h2></div>
+      <div class="stack">
+        <div class="row">
+          <div class="field"><label>Paper</label>
+            <select id="paper"><option value="letter">Letter 8.5 × 11</option><option value="a4">A4 210 × 297</option></select></div>
+          <div class="field"><label>Batch</label><div class="note" id="batch-note" style="padding-top:.45rem"></div></div>
+        </div>
+        <div class="thumb" id="thumb" role="button" tabindex="0" title="Show the full-size page preview">
+          <div class="thumb-sheet" id="thumb-sheet"></div>
+          <div class="thumb-cap"><span>This is what prints</span><span class="thumb-link">view full size ↓</span></div>
+        </div>
+        <button class="btn big accent" id="make-pdf">Generate PDF</button>
+        <button class="btn ghost" id="make-batch">Generate batch PDF</button>
+        <div class="note">Print at 100% / Actual size. Never “fit to page”. Both rulers on the printed page must read 4.00 in.</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Click calculator</h2><span class="hint" id="calc-dist"></span></div>
+      <div class="form compact">
+        <div class="row row-3">
+          <div class="field"><label for="miss-h">Right <span class="u">in</span></label><input id="miss-h" type="number" step="0.05" value="0"></div>
+          <div class="field"><label for="miss-v">Above <span class="u">in</span></label><input id="miss-v" type="number" step="0.05" value="0"></div>
+          <div class="field"><label for="calc-click">Clicks</label><select id="calc-click"></select></div>
+        </div>
+        <div class="note">Group center measured from the printed <b>impact circle</b>; negative = left / below.</div>
+        <div id="calc-result" class="calc-result"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Printer calibration</h2><span class="hint">optional</span></div>
+      <div class="form">
+        <div class="note">Print one target, measure both rulers with a good rule, and enter what you actually got. The app scales each axis independently.</div>
+        <div class="field"><label>Printer name</label><input id="cal-printer" class="text" type="text" placeholder="e.g. Brother HL-L2350"></div>
+        <div class="row">
+          <div class="field"><label>Horizontal read <span class="u">in</span></label><input id="cal-h" type="number" step="0.01" placeholder="4.00"></div>
+          <div class="field"><label>Vertical read <span class="u">in</span></label><input id="cal-v" type="number" step="0.01" placeholder="4.00"></div>
+        </div>
+        <div id="cal-status"></div>
+        <div class="inline"><button class="btn small" id="cal-apply">Apply factors</button><button class="btn small ghost" id="cal-clear">Clear</button></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<div class="footer-note">All data stays in this browser (localStorage). Export JSON to move it. Flat-fire model only — no wind, spin drift, or angle of fire; at these distances they are noise, and the geometry dominates.</div>
+
+<dialog id="selftest-dlg"><div class="dlg"><h3>Math self-test</h3><p>Golden vectors from the build spec, tolerance ±0.03 in, plus layout and click-direction assertions.</p><div id="selftest-out" class="selftest"></div><p style="margin-top:.9rem;margin-bottom:0"><button class="btn small ghost" onclick="this.closest('dialog').close()">Close</button></p></div></dialog>
+<dialog id="preview-dlg" class="preview-dlg" aria-label="Target page preview">
+  <div class="pv-head">
+    <div class="pv-title"><b>PDF preview</b><span class="hint" id="preview-hint"></span></div>
+    <div class="inline">
+      <span class="pv-nav"><button class="btn small ghost" id="pv-prev" aria-label="Previous page">◀</button><span class="num" id="pv-page"></span><button class="btn small ghost" id="pv-next" aria-label="Next page">▶</button></span>
+      <button class="btn small accent" id="make-pdf-modal">Generate PDF</button>
+      <button class="btn small ghost" id="make-batch-modal">Generate batch PDF</button>
+      <button class="btn small ghost" id="preview-close">Close</button>
+    </div>
+  </div>
+  <div class="pv-body"><div id="sheet" class="sheet-box"></div></div>
+  <div class="pv-foot">Exact PDF geometry, updated live. Esc or click outside to close.</div>
+</dialog>
+<dialog id="confirm-dlg"><div class="dlg"><h3 id="confirm-title"></h3><p id="confirm-body"></p><div class="inline"><button class="btn small" id="confirm-yes">Confirm</button><button class="btn small ghost" onclick="this.closest('dialog').close()">Cancel</button></div></div></dialog>
+
+<script>
+'use strict';
+/* =====================================================================
+   SECTION 1 — BALLISTICS
+   G1 point-mass integrator, flat fire. All distances yards, offsets inches.
+   dropInches(rangeYd, load) is the single swappable function the spec asks for.
+   ===================================================================== */
+const IN = 72;                       // points per inch (jsPDF + reportlab agree)
+const BAL = (() => {
+  // Standard G1 drag table: Mach -> Cd
+  const G1 = [[0,.2629],[.05,.2558],[.1,.2487],[.15,.2413],[.2,.2344],[.25,.2278],[.3,.2214],[.35,.2155],[.4,.2104],[.45,.2061],[.5,.2032],[.55,.2020],[.6,.2034],[.7,.2165],[.725,.2230],[.75,.2313],[.775,.2417],[.8,.2546],[.825,.2706],[.85,.2901],[.875,.3136],[.9,.3415],[.925,.3734],[.95,.4084],[.975,.4448],[1,.4805],[1.025,.5136],[1.05,.5427],[1.075,.5677],[1.1,.5883],[1.125,.6053],[1.15,.6191],[1.2,.6393],[1.25,.6518],[1.3,.6589],[1.35,.6621],[1.4,.6625],[1.45,.6607],[1.5,.6573],[1.55,.6528],[1.6,.6474],[1.65,.6413],[1.7,.6347],[1.75,.6280],[1.8,.6210],[1.85,.6141],[1.9,.6072],[1.95,.6003],[2,.5934],[2.05,.5867],[2.1,.5804],[2.15,.5743],[2.2,.5685],[2.25,.5630],[2.3,.5577],[2.35,.5527],[2.4,.5481],[2.45,.5438],[2.5,.5397],[2.6,.5325],[2.7,.5264],[2.8,.5211],[2.9,.5168],[3,.5133],[3.1,.5105],[3.2,.5084],[3.3,.5067],[3.4,.5054],[3.5,.5040],[3.6,.5030],[3.7,.5022],[3.8,.5016],[3.9,.5010],[4,.5006],[4.2,.4998],[4.4,.4995],[4.6,.4992],[4.8,.4990],[5,.4988]];
+  const C_SOUND = 1116.45;           // fps, ICAO standard atmosphere at 59 F
+  const G = 32.174;                  // ft/s^2
+  const RHO = 0.0023769;             // slug/ft^3
+  const DRAG_K = RHO * G * Math.PI / 1152;   // -> decel = K * Cd * v^2 / BC  (BC in lb/in^2)
+
+  function cd(mach) {
+    const t = G1;
+    if (mach <= t[0][0]) return t[0][1];
+    if (mach >= t[t.length - 1][0]) return t[t.length - 1][1];
+    let lo = 0, hi = t.length - 1;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (t[mid][0] <= mach) lo = mid; else hi = mid; }
+    const [m0, c0] = t[lo], [m1, c1] = t[hi];
+    return c0 + (c1 - c0) * (mach - m0) / (m1 - m0);
+  }
+
+  // Integrate once out to maxYd, sampling drop (in) and velocity (fps) every 0.25 yd.
+  function integrate(v0, bc, maxYd) {
+    const step = 0.25, n = Math.ceil(maxYd / step) + 1;
+    const drops = new Float64Array(n), vels = new Float64Array(n), times = new Float64Array(n);
+    vels[0] = v0;
+    let x = 0, y = 0, vx = v0, vy = 0, i = 1, guard = 0, t = 0;
+    const dt = 0.0002;
+    const der = (x, y, vx, vy) => {
+      const v = Math.hypot(vx, vy);
+      const a = DRAG_K * cd(v / C_SOUND) * v / bc;   // decel / v
+      return [vx, vy, -a * vx, -G - a * vy];
+    };
+    while (i < n && guard++ < 3e6) {
+      const k1 = der(x, y, vx, vy);
+      const k2 = der(x + k1[0] * dt / 2, y + k1[1] * dt / 2, vx + k1[2] * dt / 2, vy + k1[3] * dt / 2);
+      const k3 = der(x + k2[0] * dt / 2, y + k2[1] * dt / 2, vx + k2[2] * dt / 2, vy + k2[3] * dt / 2);
+      const k4 = der(x + k3[0] * dt, y + k3[1] * dt, vx + k3[2] * dt, vy + k3[3] * dt);
+      const nx = x + dt / 6 * (k1[0] + 2 * k2[0] + 2 * k3[0] + k4[0]);
+      const ny = y + dt / 6 * (k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1]);
+      const nvx = vx + dt / 6 * (k1[2] + 2 * k2[2] + 2 * k3[2] + k4[2]);
+      const nvy = vy + dt / 6 * (k1[3] + 2 * k2[3] + 2 * k3[3] + k4[3]);
+      while (i < n && nx >= i * step * 3) {
+        const xt = i * step * 3, f = (xt - x) / (nx - x);
+        drops[i] = -(y + (ny - y) * f) * 12;
+        vels[i] = vx + (nvx - vx) * f;
+        times[i] = t + f * dt;
+        i++;
+      }
+      x = nx; y = ny; vx = nvx; vy = nvy; t += dt;
+      if (vx < 40) break;
+    }
+    for (; i < n; i++) { drops[i] = drops[i - 1]; vels[i] = vels[i - 1]; times[i] = times[i - 1]; }
+    return { step, drops, vels, times, maxYd: (n - 1) * step };
+  }
+
+  const cache = new Map();
+  function traj(load, maxYd) {
+    const v0 = Math.max(100, +load.v0 || 0), bc = Math.max(0.02, +load.bc || 0);
+    const key = v0 + '|' + bc;
+    let t = cache.get(key);
+    if (!t || t.maxYd < maxYd) {
+      if (cache.size > 40) cache.clear();
+      t = integrate(v0, bc, Math.max(maxYd, 120) * 1.25);
+      cache.set(key, t);
+    }
+    return t;
+  }
+  function sampleAt(t, arr, yd) {
+    const p = Math.max(0, yd / t.step), i = Math.min(arr.length - 2, Math.floor(p)), f = p - i;
+    return arr[i] + (arr[i + 1] - arr[i]) * f;
+  }
+  // ---- public ----
+  function dropInches(rangeYd, load) { if (rangeYd <= 0) return 0; const t = traj(load, rangeYd); return sampleAt(t, t.drops, rangeYd); }
+  function velocityAt(rangeYd, load) { const t = traj(load, rangeYd); return sampleAt(t, t.vels, Math.max(0, rangeYd)); }
+  function timeOfFlight(rangeYd, load) { const t = traj(load, rangeYd); return sampleAt(t, t.times, Math.max(0, rangeYd)); }
+  // Core relation from the spec. Positive = impact BELOW aim.
+  function geomOffset(sh, Z, d, load) { return sh - (d / Z) * (sh + dropInches(Z, load)) + dropInches(d, load); }
+  // A 6 o'clock hold stacks on top: the sights sit `hold` inches below the mark, and the
+  // zero at Z is set so bullets land `hold` above the sight line there.
+  function totalOffset(sh, Z, d, load, hold) { return geomOffset(sh, Z, d, load) + (hold || 0) * (1 - d / Z); }
+  // Bullet height relative to the sight line at range x (inches, + above).
+  function heightVsLOS(sh, Z, x, load, hold) { return -sh + (x / Z) * (sh + dropInches(Z, load) + (hold || 0)) - dropInches(x, load); }
+  function nearZeroYd(sh, Z, load, hold) {
+    let prev = heightVsLOS(sh, Z, 0.5, load, hold);
+    for (let x = 1; x <= Z; x += 0.5) {
+      const h = heightVsLOS(sh, Z, x, load, hold);
+      if (prev < 0 && h >= 0) return x - 0.5 + 0.5 * (-prev) / (h - prev);
+      prev = h;
+    }
+    return null;
+  }
+  const inchesPerMOA = d => 1.047 * d / 100;
+  const inchesPerMIL = d => 3.600 * d / 100;
+  return { dropInches, velocityAt, timeOfFlight, geomOffset, totalOffset, heightVsLOS, nearZeroYd, inchesPerMOA, inchesPerMIL };
+})();
+
+/* =====================================================================
+   SECTION 2 — PRESETS
+   ===================================================================== */
+const LOADS = [
+  { id: '22lr',    cartridge: '.22 LR',            name: '40 gr high velocity', v0: 1250, bc: 0.138, refBarrel: 16,  fpsPerIn: 5,  range: [4, 24] },
+  { id: '556-55',  cartridge: '5.56 NATO / .223',  name: '55 gr FMJ',           v0: 3000, bc: 0.243, refBarrel: 16,  fpsPerIn: 30, range: [7.5, 20] },
+  { id: '556-62',  cartridge: '5.56 NATO / .223',  name: '62 gr M855',          v0: 2950, bc: 0.304, refBarrel: 16,  fpsPerIn: 30, range: [7.5, 20] },
+  { id: '556-77',  cartridge: '5.56 NATO / .223',  name: '77 gr OTM',           v0: 2700, bc: 0.372, refBarrel: 16,  fpsPerIn: 28, range: [7.5, 20] },
+  { id: '300-125', cartridge: '.300 BLK',          name: '125 gr supersonic',   v0: 2175, bc: 0.320, refBarrel: 16,  fpsPerIn: 17, range: [8, 16] },
+  { id: '300-220', cartridge: '.300 BLK',          name: '220 gr subsonic',     v0: 1050, bc: 0.300, refBarrel: 16,  fpsPerIn: 2,  range: [8, 16] },
+  { id: '9mm-c',   cartridge: '9mm',               name: '115 gr carbine',      v0: 1300, bc: 0.145, refBarrel: 16,  fpsPerIn: 11, range: [5, 16] },
+  { id: '9mm-p',   cartridge: '9mm',               name: '115 gr pistol',       v0: 1150, bc: 0.145, refBarrel: 4.5, fpsPerIn: 12, range: [3, 6], platform: 'handgun' },
+  { id: '45acp',   cartridge: '.45 ACP',           name: '230 gr FMJ pistol',   v0: 850,  bc: 0.195, refBarrel: 5,   fpsPerIn: 8,  range: [3, 6], platform: 'handgun' },
+  { id: '308',     cartridge: '.308 Win',          name: '168 gr BTHP',         v0: 2650, bc: 0.462, refBarrel: 20,  fpsPerIn: 20, range: [16, 24] },
+  { id: '65cm',    cartridge: '6.5 Creedmoor',     name: '140 gr',              v0: 2700, bc: 0.585, refBarrel: 24,  fpsPerIn: 25, range: [18, 26] },
+  { id: '762x39',  cartridge: '7.62x39',           name: '123 gr FMJ',          v0: 2350, bc: 0.275, refBarrel: 16,  fpsPerIn: 20, range: [10, 20] },
+  { id: '350',     cartridge: '.350 Legend',       name: '170 gr',              v0: 2200, bc: 0.221, refBarrel: 16,  fpsPerIn: 20, range: [16, 20] },
+];
+const SIGHT_PRESETS = {
+  rifle:   [{ h: 2.4, label: 'Low mount' }, { h: 2.6, label: 'AR flat-top / absolute co-witness' }, { h: 2.9, label: '1.93 in cantilever' }, { h: 3.1, label: 'Tall mount' }],
+  handgun: [{ h: 0.65, label: 'Iron sights (0.60–0.75)' }, { h: 1.0, label: 'Slide-mounted red dot (0.90–1.10)' }],
+};
+const CLICK_VALUES = [
+  { id: '0.25moa', label: '1/4 MOA', unit: 'moa', value: 0.25 },
+  { id: '0.5moa',  label: '1/2 MOA', unit: 'moa', value: 0.5 },
+  { id: '0.333moa', label: '1/3 MOA', unit: 'moa', value: 1 / 3 },
+  { id: '1moa',    label: '1 MOA',   unit: 'moa', value: 1 },
+  { id: '0.1mil',  label: '0.1 mil', unit: 'mil', value: 0.1 },
+  { id: '0.05mil', label: '0.05 mil', unit: 'mil', value: 0.05 },
+];
+function clickValueById(id) { return CLICK_VALUES.find(c => c.id === id) || CLICK_VALUES[0]; }
+function clickCorrection(missIn, d, cv) {
+  const ipu = cv.unit === 'moa' ? BAL.inchesPerMOA(d) : BAL.inchesPerMIL(d);
+  const units = missIn / ipu;
+  return { n: Math.round(Math.abs(units) / cv.value), units, ipu, resolution: ipu * cv.value };
+}
+// Barrel-length velocity estimate. Approximate; the UI labels it as such.
+function estimateVelocity(preset, barrelIn) {
+  const v = preset.v0 + (barrelIn - preset.refBarrel) * preset.fpsPerIn;
+  const [lo, hi] = preset.range;
+  return { v0: Math.round(v / 5) * 5, outside: barrelIn < lo || barrelIn > hi, lo, hi };
+}
+
+/* =====================================================================
+   SECTION 3 — PAGE LAYOUT (signed, page-size aware)
+   Works in the "hung frame": a portrait sheet as it hangs on the wall,
+   origin bottom-left, y up. Landscape mode keeps this frame and rotates
+   the whole drawing onto a landscape page so the offset axis gets the
+   long dimension; the header moves to a side column.
+   ===================================================================== */
+const PAPERS = { letter: { w: 612, h: 792, label: 'Letter' }, a4: { w: 595.28, h: 841.89, label: 'A4' } };
+const HEADER_H = 115.2;                // pt, reference geometry (grid top 8.9 in from the bottom on Letter)
+const MARK_CLEAR = 0.65 * IN;          // aim diamond half-diagonal + breathing room
+const GH_MIN = 1.5 * IN;               // smallest useful half-height for the grid
+const COMBINE_BELOW = 0.4;             // in — below this, aim and impact are one mark
+const MODEL_MAX_MOA = 2;               // refuse when a 10% drop-model error would move the offset more than this (MOA at d)
+
+function layoutAttempt(offsetIn, paper, orient, combined) {
+  const W = paper.w, H = paper.h, M = 0.5 * IN, land = orient === 'landscape', q = 0.25 * IN;
+  const colW = land ? HEADER_H : 0;
+  const top = H - M - (land ? 0.3 * IN : HEADER_H);
+  const bottom = 1.4 * IN;
+  // Portrait: grid centered on the page (reference geometry). Landscape: the header
+  // column takes the right side of the hung frame, so center on what is left.
+  const left = 0.97 * IN, right = land ? W - M - colW - 0.12 * IN : W - left;
+  const CX = (left + right) / 2;
+  const GW = Math.floor(((right - left) / 2) / q) * q + 0.05 * IN;
+  const band = top - bottom;
+  const off = (combined ? 0 : offsetIn) * IN;
+  let GH = Math.floor((band / 2) / q) * q, IMP_Y = (top + bottom) / 2, shrunk = false;
+  if (Math.abs(off) + MARK_CLEAR > GH) {
+    shrunk = true;
+    const aimY = off > 0 ? top - MARK_CLEAR : bottom + MARK_CLEAR;
+    IMP_Y = aimY - off;
+    GH = Math.floor(Math.min(IMP_Y - bottom, top - IMP_Y) / q) * q;
+    if (GH < GH_MIN) return { ok: false, orient, requiredSpan: (Math.abs(off) + MARK_CLEAR + GH_MIN) / IN, availableSpan: band / IN };
+  }
+  return { ok: true, mode: combined ? 'combined' : 'two', orient, paper, W, H, PW: land ? H : W, PH: land ? W : H, M, top, bottom, CX, IMP_Y, AIM_Y: IMP_Y + off, GW, GH, shrunk, colW };
+}
+function layoutFor(offsetIn, paperKey) {
+  const paper = PAPERS[paperKey] || PAPERS.letter;
+  const combined = Math.abs(offsetIn) < COMBINE_BELOW;
+  let last = null;
+  for (const orient of ['portrait', 'landscape']) {
+    const L = layoutAttempt(offsetIn, paper, orient, combined);
+    if (L.ok) return L;
+    last = L;
+  }
+  return { ok: false, mode: 'refused', paper, requiredSpan: last.requiredSpan, availableSpan: last.availableSpan };
+}
+
+/* =====================================================================
+   SECTION 4 — DRAWING BACKENDS (jsPDF and SVG share one interface)
+   ===================================================================== */
+const FONTS = { 'helvetica': ['helvetica', 'normal'], 'helvetica-bold': ['helvetica', 'bold'], 'helvetica-oblique': ['helvetica', 'italic'] };
+const FONT_CSS = { 'helvetica': ['400', 'normal'], 'helvetica-bold': ['700', 'normal'], 'helvetica-oblique': ['400', 'italic'] };
+const styleOf = st => st === 'F' ? 'F' : st === 'FD' ? 'FD' : 'S';
+
+function pdfBackend(doc) {
+  const c255 = v => Math.round(v * 255);
+  return {
+    line: (a, b, c, d) => doc.line(a, b, c, d),
+    rect: (x, y, w, h, st) => doc.rect(x, y, w, h, styleOf(st)),
+    ellipse: (x, y, rx, ry, st) => doc.ellipse(x, y, rx, ry, styleOf(st)),
+    poly: (pts, st) => {
+      const segs = [];
+      for (let i = 1; i < pts.length; i++) segs.push([pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]]);
+      doc.lines(segs, pts[0][0], pts[0][1], [1, 1], styleOf(st), true);
+    },
+    text: (x, y, s, angle) => doc.text(s, x, y, angle ? { angle } : undefined),
+    textWidth: s => doc.getTextWidth(s),
+    setFont: (name, size) => { const f = FONTS[name] || FONTS.helvetica; doc.setFont(f[0], f[1]); doc.setFontSize(size); },
+    setStroke: (r, g, b) => doc.setDrawColor(c255(r), c255(g), c255(b)),
+    setFill: (r, g, b) => doc.setFillColor(c255(r), c255(g), c255(b)),
+    setLineWidth: w => doc.setLineWidth(w),
+    setDash: (a, b) => doc.setLineDashPattern([a, b], 0),
+    clearDash: () => doc.setLineDashPattern([], 0),
+  };
+}
+
+function svgBackend() {
+  const out = [];
+  let stroke = '#000', fill = '#000', lw = 1, dash = null, font = { fam: 'helvetica', size: 10 };
+  const ctx = document.createElement('canvas').getContext('2d');
+  const col = (r, g, b) => `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`;
+  const f = n => Math.round(n * 100) / 100;
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const dashAttr = () => dash ? ` stroke-dasharray="${dash[0]} ${dash[1]}"` : '';
+  const sAttr = st => st === 'F' ? `fill="${fill}" stroke="none"` : st === 'FD' ? `fill="${fill}" stroke="${stroke}" stroke-width="${lw}"${dashAttr()}` : `fill="none" stroke="${stroke}" stroke-width="${lw}"${dashAttr()}`;
+  const fontCss = () => { const [w, st] = FONT_CSS[font.fam]; return `${st} ${w} ${font.size}px Helvetica, Arial, sans-serif`; };
+  return {
+    line: (a, b, c, d) => out.push(`<line x1="${f(a)}" y1="${f(b)}" x2="${f(c)}" y2="${f(d)}" stroke="${stroke}" stroke-width="${lw}"${dashAttr()}/>`),
+    rect: (x, y, w, h, st) => out.push(`<rect x="${f(x)}" y="${f(y)}" width="${f(w)}" height="${f(h)}" ${sAttr(st)}/>`),
+    ellipse: (x, y, rx, ry, st) => out.push(`<ellipse cx="${f(x)}" cy="${f(y)}" rx="${f(rx)}" ry="${f(ry)}" ${sAttr(st)}/>`),
+    poly: (pts, st) => out.push(`<polygon points="${pts.map(p => f(p[0]) + ',' + f(p[1])).join(' ')}" ${sAttr(st)}/>`),
+    text: (x, y, s, angle) => { const [w, st] = FONT_CSS[font.fam]; out.push(`<text x="${f(x)}" y="${f(y)}" font-size="${font.size}" font-weight="${w}" font-style="${st}" fill="${fill}"${angle ? ` transform="rotate(${-angle} ${f(x)} ${f(y)})"` : ''}>${esc(s)}</text>`); },
+    textWidth: s => { ctx.font = fontCss(); return ctx.measureText(s).width; },
+    setFont: (name, size) => { font = { fam: FONT_CSS[name] ? name : 'helvetica', size }; },
+    setStroke: (r, g, b) => { stroke = col(r, g, b); },
+    setFill: (r, g, b) => { fill = col(r, g, b); },
+    setLineWidth: w => { lw = w; },
+    setDash: (a, b) => { dash = [a, b]; },
+    clearDash: () => { dash = null; },
+    svg: (PW, PH) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${f(PW)} ${f(PH)}" style="white-space:pre" font-family="Helvetica, Arial, sans-serif"><rect width="${f(PW)}" height="${f(PH)}" fill="#fff"/>${out.join('')}</svg>`,
+  };
+}
+
+// Maps hung-frame coordinates (bottom-left origin, y up) to physical page
+// coordinates (top-left origin), rotating for landscape and applying the
+// per-axis calibration factors about the page center.
+function makePage(be, paper, orient, calib) {
+  const W = paper.w, H = paper.h, land = orient === 'landscape';
+  const PW = land ? H : W, PH = land ? W : H;
+  const fx = (calib && +calib.x) || 1, fy = (calib && +calib.y) || 1, cx = PW / 2, cy = PH / 2;
+  const P = (x, y) => { let X, Y; if (land) { X = H - y; Y = W - x; } else { X = x; Y = H - y; } return [cx + (X - cx) * fx, cy + (Y - cy) * fy]; };
+  const aAdj = land ? 90 : 0;
+  return {
+    W, H, PW, PH, orient,
+    line(x1, y1, x2, y2) { const a = P(x1, y1), b = P(x2, y2); be.line(a[0], a[1], b[0], b[1]); },
+    rect(x, y, w, h, st) { const a = P(x, y), b = P(x + w, y + h); be.rect(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]), st); },
+    circle(x, y, r, st) { const a = P(x, y); be.ellipse(a[0], a[1], r * fx, r * fy, st); },
+    poly(pts, st) { be.poly(pts.map(p => P(p[0], p[1])), st); },
+    text(x, y, s, angle = 0) { const a = P(x, y); be.text(a[0], a[1], s, angle + aAdj); },
+    textWidth: s => be.textWidth(s),
+    setFont: (n, s) => be.setFont(n, s),
+    setStroke: (r, g, b) => be.setStroke(r, g, b),
+    setFill: (r, g, b) => be.setFill(r, g, b),
+    setLineWidth: w => be.setLineWidth(w),
+    setDash: (a, b) => be.setDash(a, b),
+    clearDash: () => be.clearDash(),
+  };
+}
+
+/* =====================================================================
+   SECTION 5 — TARGET + COVER RENDERING (port of the reference reportlab)
+   ===================================================================== */
+const SIXTEENTH = IN / 16;
+const fmt2 = x => (Math.round(x * 100) / 100).toFixed(2);
+const fmtIn = x => { const s = (Math.round(x * 100) / 100).toString(); return s.includes('.') ? s : s + '.0'; };
+const fmtYd = x => (Math.round(x * 10) / 10).toString();
+const dirWord = off => Math.abs(off) < 0.005 ? 'on aim' : off > 0 ? 'low' : 'high';
+const offWord = off => Math.abs(off) < 0.005 ? '0.00 in (on aim)' : `${fmt2(Math.abs(off))} in ${dirWord(off)}`;
+
+function knockout(page, x, y, text, font = 'helvetica', size = 8, align = 'left', pad = 2) {
+  page.setFont(font, size);
+  const w = page.textWidth(text);
+  const x0 = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+  page.setFill(1, 1, 1);
+  page.rect(x0 - pad, y - pad - 0.5, w + 2 * pad, size + pad, 'F');
+  page.setFill(0, 0, 0);
+  page.text(x0, y, text);
+}
+function centredText(page, x, y, s) { const w = page.textWidth(s); page.text(x - w / 2, y, s); }
+function tickLen(i) { return i % 16 === 0 ? 9 : i % 4 === 0 ? 5.5 : 3; }
+
+function scaleBarH(page, x, y, twoLine) {
+  page.setStroke(0, 0, 0); page.setLineWidth(0.8);
+  page.line(x, y, x + 4 * IN, y);
+  for (let i = 0; i < 65; i++) { page.setLineWidth(i % 16 === 0 ? 0.8 : 0.5); const xx = x + i * SIXTEENTH; page.line(xx, y, xx, y + tickLen(i)); }
+  page.setFill(0, 0, 0); page.setFont('helvetica', 6);
+  for (let i = 0; i < 5; i++) centredText(page, x + i * IN, y + 11, String(i));
+  page.setFont('helvetica-bold', 7); page.text(x + 4 * IN + 8, y + 4, 'HORIZONTAL  4.00 in');
+  page.setFont('helvetica', 7);
+  if (twoLine) { page.text(x + 4 * IN + 8, y - 5, 'Both bars must read 4.00 in.'); page.text(x + 4 * IN + 8, y - 13, 'If either does not, reprint at 100% / Actual Size.'); }
+  else page.text(x + 4 * IN + 8, y - 5, 'Both bars must read 4.00 in. If either does not, reprint at 100% / Actual Size.');
+}
+function scaleBarV(page, x, y) {
+  page.setStroke(0, 0, 0); page.setLineWidth(0.8);
+  page.line(x, y, x, y + 4 * IN);
+  for (let i = 0; i < 65; i++) { page.setLineWidth(i % 16 === 0 ? 0.8 : 0.5); const yy = y + i * SIXTEENTH; page.line(x, yy, x + tickLen(i), yy); }
+  page.setFill(0, 0, 0); page.setFont('helvetica', 6);
+  for (let i = 0; i < 5; i++) page.text(x + 11, y + i * IN - 2, String(i));
+  page.setFont('helvetica-bold', 7);
+  page.text(x - 3, y + 4 * IN + 10, 'VERTICAL  4.00 in  —  this axis sets the offset', 90);
+}
+
+function drawGrid(page, L, aimY) {
+  const { CX, IMP_Y, GW, GH } = L, minor = 0.25 * IN;
+  page.setStroke(0.7, 0.7, 0.7); page.setLineWidth(0.3);
+  for (let i = 1; i * minor <= GW; i++) { page.line(CX + i * minor, IMP_Y - GH, CX + i * minor, IMP_Y + GH); page.line(CX - i * minor, IMP_Y - GH, CX - i * minor, IMP_Y + GH); }
+  for (let i = 1; i * minor <= GH; i++) { page.line(CX - GW, IMP_Y + i * minor, CX + GW, IMP_Y + i * minor); page.line(CX - GW, IMP_Y - i * minor, CX + GW, IMP_Y - i * minor); }
+  page.setStroke(0.45, 0.45, 0.45); page.setLineWidth(0.6);
+  for (let i = 1; i * IN <= GW; i++) { page.line(CX + i * IN, IMP_Y - GH, CX + i * IN, IMP_Y + GH); page.line(CX - i * IN, IMP_Y - GH, CX - i * IN, IMP_Y + GH); }
+  for (let i = 1; i * IN <= GH; i++) { page.line(CX - GW, IMP_Y + i * IN, CX + GW, IMP_Y + i * IN); page.line(CX - GW, IMP_Y - i * IN, CX + GW, IMP_Y - i * IN); }
+  page.setStroke(0, 0, 0); page.setLineWidth(1.0);
+  page.rect(CX - GW, IMP_Y - GH, 2 * GW, 2 * GH, 'S');
+  page.setLineWidth(1.4);
+  page.line(CX - GW, IMP_Y, CX + GW, IMP_Y);
+  page.line(CX, IMP_Y - GH, CX, IMP_Y + GH);
+  for (let i = 1; i <= Math.floor(GW / IN); i++) for (const sx of [1, -1]) knockout(page, CX + sx * i * IN, IMP_Y + 5, String(i), 'helvetica', 6.5, 'center', 1.5);
+  for (let i = 1; i <= Math.floor(GH / IN); i++) for (const sy of [1, -1]) {
+    const yy = IMP_Y + sy * i * IN;
+    if (aimY != null && Math.abs(yy - aimY) < 0.7 * IN) continue;   // would be buried under the aim diamond
+    knockout(page, CX - 5, yy - 2.5, String(i), 'helvetica', 6.5, 'right', 1.5);
+  }
+}
+
+// T: { name, d, Z, sh, loadLabel, offset, layout, varianceRows:[{sh,off,user}], hold, holdType, calibStamp }
+function drawTarget(page, T) {
+  const L = T.layout, { CX, IMP_Y, AIM_Y, M, W, H } = L, land = L.orient === 'landscape';
+  const combined = L.mode === 'combined';
+  // ---- header, drawn in a frame that is the page top (portrait) or a side column (landscape)
+  const Wf = land ? H : W, Hf = land ? W : H, hAng = land ? -90 : 0;
+  const hp = land ? (x, y) => [y, H - x] : (x, y) => [x, y];
+  const ht = (x, y, s) => { const p = hp(x, y); page.text(p[0], p[1], s, hAng); };
+  const hl = (x1, y1, x2, y2) => { const a = hp(x1, y1), b = hp(x2, y2); page.line(a[0], a[1], b[0], b[1]); };
+  const ftop = Hf - M;
+  page.setFill(0, 0, 0); page.setStroke(0, 0, 0);
+  page.setFont('helvetica-bold', 15); ht(M, ftop - 15, T.name);
+  if (T.calibStamp) { page.setFont('helvetica-bold', 7); const w = page.textWidth(T.calibStamp); ht(Wf - M - w, ftop - 12, T.calibStamp); }
+  page.setFont('helvetica', 9.5);
+  let x = M; const y1 = ftop - 29;
+  const p1 = `Zero on this target at ${fmtYd(T.d)} yd `;
+  ht(x, y1, p1); x += page.textWidth(p1) + 2;
+  page.setLineWidth(0.8); hl(x, y1 + 3, x + 10, y1 + 3); hl(x + 7, y1 + 5.8, x + 10.2, y1 + 3); hl(x + 7, y1 + 0.2, x + 10.2, y1 + 3); x += 14;
+  ht(x, y1, `zeroed at ${fmtYd(T.Z)} yd   |   ${T.loadLabel}   |   sight height ${fmtIn(T.sh)} in`);
+  page.setLineWidth(1.2); hl(M, ftop - 36, Wf - M, ftop - 36);
+  // variance table
+  const tx = Wf - M - 2.05 * IN, ty = ftop - 55;
+  page.setFont('helvetica-bold', 7.5); ht(tx, ty + 12, 'IF YOUR SIGHT HEIGHT DIFFERS:');
+  page.setFont('helvetica', 7.5); ht(tx, ty, 'sight ht'); ht(tx + 0.75 * IN, ty, 'POI vs POA');
+  page.setLineWidth(0.4); hl(tx, ty - 3, tx + 2.0 * IN, ty - 3);
+  T.varianceRows.forEach((r, i) => {
+    const yy = ty - 12 - i * 10;
+    page.setFont(r.user ? 'helvetica-bold' : 'helvetica', 7.5);
+    ht(tx, yy, `${fmtIn(r.sh)} in`);
+    ht(tx + 0.75 * IN, yy, offWord(r.off) + (r.user ? '   <—' : ''));
+  });
+  // legend
+  const lx = M, ly = ftop - 55;
+  if (!combined) {
+    page.setFont('helvetica-bold', 8); ht(lx, ly, 'AIM at the diamond.  ADJUST until groups center on the circle.');
+    page.setFont('helvetica', 7.5);
+    ht(lx, ly - 11, 'Grid squares = 0.25 in.  Heavy lines and numerals = 1 in.');
+    ht(lx, ly - 21, 'Measure the group center from the circle to get your click correction.');
+  } else {
+    page.setFont('helvetica-bold', 8); ht(lx, ly, 'AIM at the center pip.  At this distance point of aim IS point of impact.');
+    page.setFont('helvetica', 7.5);
+    ht(lx, ly - 11, `Computed offset ${fmt2(Math.abs(T.offset))} in ${dirWord(T.offset)} — inside the mark. Groups should center on the mark itself.`);
+    ht(lx, ly - 21, 'Grid squares = 0.25 in.  Measure the group center from the pip for your click correction.');
+  }
+  let ly2 = ly - 31;
+  if (T.clickRes) {   // turret clicks per grid square at this distance
+    const perBox = 0.25 / T.clickRes, perIn = 1 / T.clickRes;
+    page.setFont('helvetica-bold', 7.5);
+    ht(lx, ly2, `${T.clickValue.label} clicks at ${fmtYd(T.d)} yd:  ${perBox.toFixed(1)} clicks per 0.25 in square,  ${perIn.toFixed(1)} per inch  (1 click = ${(Math.round(T.clickRes * 1000) / 1000).toFixed(3)} in).`);
+    ly2 -= 10;
+  }
+  if (T.holdType === 'six') { page.setFont('helvetica', 7.5); ht(lx, ly2, `6 o'clock hold: front sight ${fmt2(T.hold)} in below the pip, exactly as you hold at ${fmtYd(T.Z)} yd. This is included in the offset.`); }
+  if (land) {
+    page.setFont('helvetica-bold', 7);
+    const s = '^  THIS EDGE UP  —  printed landscape to fit the offset. Hang the sheet so this line reads normally.';
+    const w = page.textWidth(s);
+    page.text((W - L.colW) / 2 - w / 2, H - M - 8, s);
+  }
+  // ---- grid first, then marks, then labels (draw order matters)
+  drawGrid(page, L, combined ? null : AIM_Y);
+  page.setStroke(0, 0, 0); page.setFill(0, 0, 0);
+  const r = 0.55 * IN;
+  const diamond = yy => [[CX, yy + r], [CX + r, yy], [CX, yy - r], [CX - r, yy]];
+  const ticks = yy => { page.setLineWidth(0.9); page.clearDash(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) page.line(CX + dx * 0.62 * IN, yy + dy * 0.62 * IN, CX + dx * 0.85 * IN, yy + dy * 0.85 * IN); };
+  if (!combined) {
+    const s = AIM_Y >= IMP_Y ? 1 : -1;
+    if (s * (AIM_Y - IMP_Y) > 0.92 * IN) { page.setDash(3, 3); page.setLineWidth(0.8); page.line(CX, AIM_Y - s * 0.58 * IN, CX, IMP_Y + s * 0.32 * IN); page.clearDash(); }
+    page.setLineWidth(1.8); page.circle(CX, IMP_Y, 0.3 * IN, 'S');
+    page.circle(CX, IMP_Y, 0.045 * IN, 'F');
+    page.poly(diamond(AIM_Y), 'F');
+    page.setFill(1, 1, 1); page.circle(CX, AIM_Y, 0.05 * IN, 'F'); page.setFill(0, 0, 0);
+    if (s * (AIM_Y - IMP_Y) < 0.9 * IN) {   // marks overlap: re-stroke the circle so it reads over the diamond
+      page.setStroke(1, 1, 1); page.setLineWidth(3.2); page.circle(CX, IMP_Y, 0.3 * IN, 'S');
+      page.setStroke(0, 0, 0); page.setLineWidth(1.8); page.circle(CX, IMP_Y, 0.3 * IN, 'S');
+    }
+    ticks(AIM_Y);
+    // dimension arrow
+    const ax = CX - 1.6 * IN;
+    page.setLineWidth(0.9); page.line(ax, AIM_Y, ax, IMP_Y);
+    const dA = AIM_Y > IMP_Y ? -1 : 1;
+    for (const [yy, dd] of [[AIM_Y, dA], [IMP_Y, -dA]]) { page.line(ax - 3, yy + dd * 5, ax, yy); page.line(ax + 3, yy + dd * 5, ax, yy); }
+    page.setDash(2, 3); page.setLineWidth(0.6);
+    page.line(ax, AIM_Y, CX - 0.6 * IN, AIM_Y);
+    page.line(ax, IMP_Y, CX - 0.32 * IN, IMP_Y);
+    page.clearDash();
+    knockout(page, ax - 5, (AIM_Y + IMP_Y) / 2 - 4, `${fmt2(Math.abs(T.offset))}" ${T.offset > 0 ? 'low' : 'high'}`, 'helvetica-bold', 11, 'right', 3);
+    knockout(page, CX + 0.92 * IN, AIM_Y - 3, 'POINT OF AIM', 'helvetica-bold', 8.5);
+    knockout(page, CX + 0.42 * IN, IMP_Y - 3, 'EXPECTED IMPACT', 'helvetica-bold', 8.5);
+  } else {
+    page.poly(diamond(IMP_Y), 'F');
+    page.setStroke(1, 1, 1); page.setLineWidth(1.8); page.circle(CX, IMP_Y, 0.3 * IN, 'S');
+    page.setFill(1, 1, 1); page.circle(CX, IMP_Y, 0.05 * IN, 'F'); page.setFill(0, 0, 0); page.setStroke(0, 0, 0);
+    ticks(IMP_Y);
+    knockout(page, CX + 0.92 * IN, IMP_Y - 3, 'AIM HERE  =  EXPECTED IMPACT', 'helvetica-bold', 8.5);
+    knockout(page, CX + 0.92 * IN, IMP_Y - 14, `computed offset ${fmt2(Math.abs(T.offset))} in ${dirWord(T.offset)}, inside the mark`, 'helvetica', 7);
+  }
+  // ---- rulers
+  scaleBarH(page, M, 0.55 * IN, land);
+  scaleBarV(page, M + 0.12 * IN, L.bottom + 0.6 * IN);
+}
+
+function wrapText(page, text, maxW) {
+  const words = text.split(' '), lines = []; let cur = '';
+  for (const w of words) { const t = cur ? cur + ' ' + w : w; if (page.textWidth(t) > maxW && cur) { lines.push(cur); cur = w; } else cur = t; }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+// Cover / instructions page. `ctx.newPage(orient)` returns a fresh page object.
+function drawCover(ctx, targets, opts) {
+  const paper = PAPERS[opts.paper] || PAPERS.letter;
+  let page = ctx.newPage('portrait');
+  const W = paper.w, H = paper.h, M = 0.5 * IN, maxW = W - 2 * M;
+  let y;
+  const bottomLimit = 1.15 * IN;
+  const footer = () => scaleBarH(page, M, 0.6 * IN, false);
+  const ensure = need => { if (y - need < bottomLimit) { footer(); page = ctx.newPage('portrait'); y = H - M - 12; } };
+  const text = (s, font, size, dy) => { page.setFont(font, size); ensure(dy); page.text(M, y, s); y -= dy; };
+  const para = (s, font, size, dy, indent = 0) => { page.setFont(font, size); for (const ln of wrapText(page, s, maxW - indent)) { ensure(dy); page.text(M + indent, y, ln); y -= dy; } };
+
+  const dists = [...new Set(targets.map(t => fmtYd(t.d)))];
+  page.setFill(0, 0, 0); page.setStroke(0, 0, 0);
+  page.setFont('helvetica-bold', 18); page.text(M, H - 0.85 * IN, dists.length === 1 ? `${dists[0]}-Yard Zeroing Offset Targets` : 'Zeroing Offset Targets');
+  page.setFont('helvetica', 10);
+  page.text(M, H - 1.1 * IN, `${targets.length} target${targets.length === 1 ? '' : 's'}   |   ${paper.label} paper, print at 100%   |   Target distance${dists.length === 1 ? '' : 's'}: ${dists.join(', ')} yards`);
+  if (opts.calibStamp) { page.setFont('helvetica-bold', 7.5); const w = page.textWidth(opts.calibStamp); page.text(W - M - w, H - 0.7 * IN, opts.calibStamp); }
+  page.setLineWidth(1.2); page.line(M, H - 1.2 * IN, W - M, H - 1.2 * IN);
+
+  y = H - 1.55 * IN;
+  text('How to use', 'helvetica-bold', 11, 16);
+  const steps = [
+    '1.  Print at 100% / Actual Size. Do NOT use "fit to page." Verify with BOTH scale bars on each target page.',
+    '2.  Hang each target at the measured distance printed on it. Shoot from a rest — bags, bipod, bench. Not offhand.',
+    '      A boresight laser first is fine — use it to get roughly on paper, then let live fire do the actual work.',
+    '3.  Aim at the center pip of the black diamond for every shot. Never chase the group with your hold.',
+    '4.  Fire 3–5 rounds. Find the center of the group.',
+    '5.  Adjust the optic to move the group center onto the circle — not onto the aim point.',
+    '6.  Confirm with 3 more rounds, then verify at the actual zero distance before trusting it.',
+  ];
+  for (const s of steps) text(s, 'helvetica', 9.5, 14);
+
+  y -= 10;
+  text('Offsets on this sheet', 'helvetica-bold', 11, 6);
+  const colx = [M, M + 1.85 * IN, M + 3.55 * IN, M + 4.25 * IN, M + 4.95 * IN, M + 6.15 * IN];
+  const rows = [['Target', 'Load assumed', 'Shoot at', 'Far zero', 'POI vs POA', 'Range error']];
+  for (const t of targets) rows.push([t.name, t.loadLabel, `${fmtYd(t.d)} yd`, `${fmtYd(t.Z)} yd`, t.layout.mode === 'combined' ? `on aim (${fmt2(Math.abs(t.offset))} in)` : offWord(t.offset), `${fmt2(t.rangeErrPerYd)} in/yd`]);
+  rows.forEach((row, ri) => {
+    y -= 15; ensure(0);
+    page.setFont(ri === 0 ? 'helvetica-bold' : 'helvetica', 9);
+    row.forEach((cell, ci) => { const w = ci < 5 ? colx[ci + 1] - colx[ci] - 6 : maxW - (colx[ci] - M); let s = String(cell); while (page.textWidth(s) > w && s.length > 3) s = s.slice(0, -2); page.text(colx[ci], y, s); });
+    if (ri === 0) { page.setLineWidth(0.5); page.line(M, y - 4, W - M, y - 4); }
+  });
+
+  y -= 28;
+  text('Using the grid', 'helvetica-bold', 11, 15);
+  const gridnotes = [
+    'One target per page. The grid fills the sheet so a first group that lands well off the mark is still a readable coordinate.',
+    'Minor squares are 0.25 in, heavy lines and numerals are 1 in, both measured out from the impact circle.',
+    'A wide grid buys capture range, not precision — see the resolution note below before chasing small errors.',
+    'Each target page carries a horizontal and a vertical 4 in ruler, both ticked in 1/16 in. Measure both.',
+    'Printers can scale differently across the page than along the paper feed. Every offset here is vertical, so the vertical ruler is the one that actually governs your zero — a correct horizontal bar alone proves nothing.',
+  ];
+  if (targets.some(t => t.layout.orient === 'landscape')) gridnotes.push('Targets marked THIS EDGE UP are printed landscape to fit their offset. Hang them rotated so that line reads normally; the rulers are labelled for the hung orientation.');
+  for (const n of gridnotes) para(n, 'helvetica', 9, 13);
+
+  y -= 12;
+  text(`Read this before you trust a ${dists.length === 1 ? dists[0] + '-yard' : 'short-range'} zero`, 'helvetica-bold', 11, 16);
+  const shSens = targets.map(t => Math.abs(0.1 * (1 - t.d / t.Z)));
+  const notes = [
+    `•  Sight height dominates. At short range the offset is almost pure geometry, not ballistics. Every 0.1 in of error in your measured sight height shifts the correct offset by roughly ${fmt2(Math.min(...shSens))}–${fmt2(Math.max(...shSens))} in. Measure optic center to bore center.`,
+  ];
+  for (const dstr of dists.slice(0, 3)) {
+    const d = +dstr, moa = BAL.inchesPerMOA(d);
+    notes.push(`•  ${dstr} yd is a coarse zero. 1 MOA subtends only ${(Math.round(moa * 1000) / 1000)} in at this distance, so a 1/2-MOA click moves impact ~${fmt2(moa / 2)} in — finer than you can reliably read on paper. A 0.1 in error in group center is about ${fmt2(0.1 / moa)} in at 100 yd.`);
+  }
+  notes.push(`•  Measure the distance. Each yard of range error shifts the correct offset by about ${targets.map(t => `${fmt2(t.rangeErrPerYd)} in (${t.shortName}/${fmtYd(t.Z)} yd)`).join(', ')}. The short-zero targets are the fussy ones.`);
+  notes.push('•  Treat this as a first-shot-on-paper zero. It gets you close enough to confirm at real distance, then refine there.');
+  if (targets.some(t => t.load.estimated)) notes.push(`•  Velocities marked "est." were estimated from barrel length. A chronographed figure is better, but at these distances the geometry dominates and the printed offset moves by well under 1 MOA at the far zero.`);
+  if (targets.some(t => t.holdType === 'six')) notes.push(`•  Targets with a 6 o'clock hold include your hold offset in the printed offset. Hold exactly the way you entered it, on this target and at the zero distance.`);
+  for (const n of notes) para(n, 'helvetica', 9, 13, 0);
+
+  y -= 12;
+  ensure(40);
+  text('Formula used', 'helvetica-bold', 9, 13);
+  text('offset = SH − (d / Z) × (SH + drop@Z) + drop@d      (plus hold offset × (1 − d / Z) for a 6 o\'clock hold)', 'helvetica', 9, 12);
+  text('SH = sight height over bore, d = distance the target is shot at, Z = desired zero distance in yards, drops measured from the bore line (G1 point-mass).', 'helvetica-oblique', 8, 12);
+  footer();
+}
+
+function buildPdf(targets, opts) {
+  const { jsPDF } = window.jspdf;
+  const paper = PAPERS[opts.paper] || PAPERS.letter;
+  const doc = new jsPDF({ unit: 'pt', format: [paper.w, paper.h], orientation: 'portrait', compress: true });
+  doc.setProperties({ title: 'Zeroing Offset Targets' });
+  const be = pdfBackend(doc);
+  let first = true;
+  const newPage = orient => {
+    const land = orient === 'landscape';
+    if (!first) doc.addPage([land ? paper.h : paper.w, land ? paper.w : paper.h], land ? 'landscape' : 'portrait');
+    first = false;
+    return makePage(be, paper, orient, opts.calib);
+  };
+  drawCover({ newPage }, targets, opts);
+  for (const T of targets) drawTarget(newPage(T.layout.orient), T);
+  return doc;
+}
+function renderTargetSvg(T, calib) {
+  const be = svgBackend();
+  const page = makePage(be, T.layout.paper, T.layout.orient, calib);
+  drawTarget(page, T);
+  return be.svg(page.PW, page.PH);
+}
+</script>
+
+<script>
+'use strict';
+/* =====================================================================
+   SECTION 6 — STATE + STORAGE
+   ===================================================================== */
+const STORE_KEY = 'zeroing-offset-targets.v1';
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const newId = () => 'g' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-3);
+const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function makeGun(over = {}) {
+  const p = LOADS.find(l => l.id === (over.loadId || '556-55')) || LOADS[1];
+  return Object.assign({
+    id: newId(), name: 'New rifle', cartridge: p.cartridge, platform: 'rifle', sightType: 'optic',
+    sightHeight: 2.6, barrelLength: p.refBarrel,
+    load: { presetId: p.id, name: p.name, v0: p.v0, bc: p.bc, estimated: false },
+    shootDistance: 10, defaultZero: 100, clickValue: '0.25moa', scopeYd: 300,
+    hold: { type: 'center', offsetIn: 0 },
+  }, over);
+}
+function defaultDb() {
+  return {
+    schema: 1,
+    guns: [
+      makeGun({ name: 'AR-15', cartridge: '5.56 NATO', loadId: '556-55', defaultZero: 100, clickValue: '0.5moa' }),
+      makeGun({ name: 'AR-9', cartridge: '9mm', loadId: '9mm-c', defaultZero: 25, clickValue: '0.5moa' }),
+      makeGun({ name: '300 BLACKOUT', cartridge: 'SUPERSONIC', loadId: '300-125', defaultZero: 50, clickValue: '0.5moa' }),
+      makeGun({ name: '300 BLACKOUT', cartridge: 'SUBSONIC', loadId: '300-220', defaultZero: 50, clickValue: '0.5moa' }),
+    ],
+    calibration: { printer: '', x: 1, y: 1 },
+    settings: { paper: 'letter', activeId: null, selected: [], scopeMag: 'auto' },
+  };
+}
+function normalizeGun(g) {
+  const base = makeGun();
+  const out = Object.assign({}, base, g);
+  out.load = Object.assign({}, base.load, g.load || {});
+  out.hold = Object.assign({}, base.hold, g.hold || {});
+  if (!out.id) out.id = newId();
+  for (const k of ['sightHeight', 'shootDistance', 'defaultZero']) out[k] = +out[k] || base[k];
+  out.load.v0 = +out.load.v0 || base.load.v0; out.load.bc = +out.load.bc || base.load.bc;
+  if (out.barrelLength != null && out.barrelLength !== '') out.barrelLength = +out.barrelLength;
+  if (!['rifle', 'handgun'].includes(out.platform)) out.platform = 'rifle';
+  if (!['optic', 'irons'].includes(out.sightType)) out.sightType = 'optic';
+  if (out.sightType === 'irons' && !['center', 'six'].includes(out.hold.type)) out.hold.type = null;
+  if (!clickValueById(out.clickValue)) out.clickValue = '0.25moa';
+  return out;
+}
+function migrate(raw) {
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.guns)) return defaultDb();
+  const db = defaultDb();
+  db.guns = raw.guns.map(normalizeGun);
+  db.calibration = Object.assign(db.calibration, raw.calibration || {});
+  db.calibration.x = +db.calibration.x || 1; db.calibration.y = +db.calibration.y || 1;
+  db.settings = Object.assign(db.settings, raw.settings || {});
+  if (!PAPERS[db.settings.paper]) db.settings.paper = 'letter';
+  db.settings.selected = (db.settings.selected || []).filter(id => db.guns.some(g => g.id === id));
+  db.schema = 1;   // future schema bumps migrate here
+  return db;
+}
+function loadDb() { try { return migrate(JSON.parse(localStorage.getItem(STORE_KEY))); } catch (e) { return defaultDb(); } }
+function saveDb() { try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); } catch (e) { console.warn('localStorage unavailable', e); } }
+
+let db = loadDb();
+const activeGun = () => db.guns.find(g => g.id === db.settings.activeId) || db.guns[0] || null;
+
+/* =====================================================================
+   SECTION 7 — DERIVED COMPUTATION FOR ONE GUN
+   ===================================================================== */
+function calibActive() { const c = db.calibration; return Math.abs(c.x - 1) > 1e-6 || Math.abs(c.y - 1) > 1e-6; }
+function calibStamp() { if (!calibActive()) return ''; const c = db.calibration; return `CALIBRATED FOR ${c.printer || 'ONE PRINTER'}: x ×${c.x.toFixed(3)}, y ×${c.y.toFixed(3)} — WRONG ON ANY OTHER PRINTER`; }
+
+function computeTarget(gun, ov = {}) {
+  const d = Math.max(0.5, +(ov.d ?? gun.shootDistance)), Z = Math.max(0.5, +(ov.Z ?? gun.defaultZero));
+  const sh = +(ov.sh ?? gun.sightHeight);
+  const load = { v0: +(ov.v0 ?? gun.load.v0), bc: +(ov.bc ?? gun.load.bc), estimated: !!gun.load.estimated, name: gun.load.name };
+  const holdType = gun.sightType === 'irons' ? gun.hold.type : 'center';
+  const hold = holdType === 'six' ? Math.max(0, +(ov.hold ?? gun.hold.offsetIn) || 0) : 0;
+  const geom = BAL.geomOffset(sh, Z, d, load);
+  const offset = geom + hold * (1 - d / Z);
+  const dropD = BAL.dropInches(d, load), dropZ = BAL.dropInches(Z, load);
+  let layout = layoutFor(offset, db.settings.paper);
+  // Validity domain: the method assumes sight geometry dominates the drop model. A 10% error in the
+  // predicted drop at Z scales onto the paper by d/Z; expressed in MOA at d that is independent of d,
+  // so it is a property of the zero distance and load alone. Beyond MODEL_MAX_MOA it is not a zeroing target.
+  const modelMOA = 0.1 * dropZ / Z / 0.01047;
+  let maxZero = null;
+  if (modelMOA > MODEL_MAX_MOA) {
+    for (let z = 25; z <= 1500; z += 5) { if (0.1 * BAL.dropInches(z, load) / z / 0.01047 > MODEL_MAX_MOA) break; maxZero = z; }
+    layout = { ok: false, mode: 'refused', reason: 'model', paper: layout.paper || PAPERS[db.settings.paper] || PAPERS.letter, modelMOA, maxZero, dropMOA: dropZ / Z / 0.01047 };
+  }
+  const presets = SIGHT_PRESETS[gun.platform].map(p => p.h);
+  const shs = [...new Set([...presets, Math.round(sh * 100) / 100])].sort((a, b) => a - b);
+  const varianceRows = shs.map(h => ({ sh: h, off: BAL.totalOffset(h, Z, d, load, hold), user: Math.abs(h - sh) < 0.005 }));
+  const cv = clickValueById(gun.clickValue);
+  const T = {
+    gun, d, Z, sh, load, hold, holdType, geom, offset, dropD, dropZ, layout, varianceRows,
+    name: `${gun.name}  /  ${gun.cartridge}`.trim(), shortName: gun.name,
+    loadLabel: `${load.name} @ ${load.estimated ? 'est. ' : '~'}${Math.round(load.v0)} fps`,
+    rangeErrPerYd: (sh + dropZ + hold) / Z,
+    nearZero: BAL.nearZeroYd(sh, Z, load, hold),
+    moaAtD: BAL.inchesPerMOA(d), clickValue: cv, clickRes: (cv.unit === 'moa' ? BAL.inchesPerMOA(d) : BAL.inchesPerMIL(d)) * cv.value,
+    calibStamp: calibStamp(), holdMissing: gun.sightType === 'irons' && !gun.hold.type,
+  };
+  if (!layout.ok && layout.reason !== 'model') {
+    // find the nearest longer shooting distance that fits on this paper
+    let fit = null;
+    for (let dd = Math.ceil(d) + 1; dd <= 400; dd++) { const o = BAL.totalOffset(sh, Z, dd, load, hold); if (layoutFor(o, db.settings.paper).ok) { fit = { d: dd, offset: o }; break; } }
+    T.fit = fit;
+  }
+  return T;
+}
+
+/* =====================================================================
+   SECTION 8 — UI: INVENTORY + SETUP FORM
+   ===================================================================== */
+function gunSummary(g) {
+  const T = computeTarget(g);
+  const cls = T.layout.mode === 'combined' ? 'onaim' : 'lowhigh';
+  const word = !T.layout.ok ? `<span class="lowhigh">${T.layout.reason === 'model' ? 'not a zeroing target' : 'won’t fit'}</span>` : T.layout.mode === 'combined' ? '<span class="onaim">on aim</span>' : `<span class="${cls}">${fmt2(Math.abs(T.offset))}″ ${dirWord(T.offset)}</span>`;
+  return `${fmtYd(T.d)} → ${fmtYd(T.Z)} yd · ${word}`;
+}
+function renderInventory() {
+  const list = $('#gun-list');
+  const act = activeGun();
+  if (!db.guns.length) { list.innerHTML = '<div class="empty">No firearms yet. Add one to start.</div>'; }
+  else list.innerHTML = db.guns.map(g => `
+    <div class="gun${act && g.id === act.id ? ' active' : ''}" data-id="${g.id}" role="button" tabindex="0">
+      <input type="checkbox" data-sel="${g.id}" ${db.settings.selected.includes(g.id) ? 'checked' : ''} title="Include in batch PDF" aria-label="Include ${esc(g.name)} in batch">
+      <div><div class="gname">${esc(g.name)} <span style="font-weight:400;color:var(--ink-2)">/ ${esc(g.cartridge)}</span></div><div class="gsub num">${gunSummary(g)}</div></div>
+      <button class="gdel" data-del="${g.id}" title="Delete" aria-label="Delete ${esc(g.name)}">×</button>
+    </div>`).join('');
+  updateBatchState();
+}
+function refreshInventoryRow(g) { const el = $(`.gun[data-id="${g.id}"]`); if (!el) return; el.querySelector('.gname').innerHTML = `${esc(g.name)} <span style="font-weight:400;color:var(--ink-2)">/ ${esc(g.cartridge)}</span>`; el.querySelector('.gsub').innerHTML = gunSummary(g); }
+
+function fieldNum(id, label, value, step, unit, extra = '') { return `<div class="field"><label for="${id}">${label}${unit ? ` <span class="u">${unit}</span>` : ''}</label><input id="${id}" data-f="${id}" type="number" step="${step}" value="${value}" ${extra}></div>`; }
+function seg(id, opts, cur) { return `<div class="seg" data-seg="${id}">${opts.map(o => `<button type="button" data-v="${o.v}" class="${o.v === cur ? 'on' : ''}">${o.l}</button>`).join('')}</div>`; }
+
+function renderSetup() {
+  const g = activeGun(), form = $('#setup-form');
+  if (!g) { form.innerHTML = '<div class="empty">Add a firearm to set it up.</div>'; $('#setup-hint').textContent = ''; return; }
+  $('#setup-hint').textContent = g.platform === 'handgun' ? 'handgun' : 'rifle / carbine';
+  const sp = SIGHT_PRESETS[g.platform];
+  const presetMatch = sp.find(p => Math.abs(p.h - g.sightHeight) < 0.005);
+  const loadOpts = LOADS.map(l => `<option value="${l.id}" ${g.load.presetId === l.id ? 'selected' : ''}>${esc(l.cartridge)} — ${esc(l.name)}${l.platform === 'handgun' ? ' (pistol)' : ''}</option>`).join('');
+  form.innerHTML = `
+    <div class="row">
+      <div class="field"><label for="f-name">Name</label><input id="f-name" data-f="name" class="text" type="text" value="${esc(g.name)}"></div>
+      <div class="field"><label for="f-cart">Cartridge label</label><input id="f-cart" data-f="cartridge" class="text" type="text" value="${esc(g.cartridge)}"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Platform</label>${seg('platform', [{ v: 'rifle', l: 'Rifle' }, { v: 'handgun', l: 'Handgun' }], g.platform)}</div>
+      <div class="field"><label>Sights</label>${seg('sightType', [{ v: 'optic', l: 'Optic' }, { v: 'irons', l: 'Iron sights' }], g.sightType)}</div>
+    </div>
+    <div id="hold-block">${renderHoldBlock(g)}</div>
+    <div class="subhead">Sight height over bore</div>
+    <div class="row">
+      <div class="field"><label for="f-shp">Preset</label><select id="f-shp" data-f="shPreset">${sp.map(p => `<option value="${p.h}" ${presetMatch && presetMatch.h === p.h ? 'selected' : ''}>${p.h.toFixed(2)} in — ${esc(p.label)}</option>`).join('')}<option value="" ${presetMatch ? '' : 'selected'}>Custom (measured)</option></select></div>
+      ${fieldNum('f-sh', 'Height', g.sightHeight, '0.05', 'in, optic center to bore center')}
+    </div>
+    <div class="subhead">Load</div>
+    <div class="field"><label for="f-preset">Preset load</label><select id="f-preset" data-f="loadPreset"><option value="">Custom</option>${loadOpts}</select></div>
+    <div class="row row-3">
+      <div class="field"><label for="f-lname">Bullet</label><input id="f-lname" data-f="loadName" class="text" type="text" value="${esc(g.load.name)}"></div>
+      ${fieldNum('f-v0', 'Velocity', Math.round(g.load.v0), '5', 'fps', g.load.estimated ? 'class="est"' : '')}
+      ${fieldNum('f-bc', 'BC (G1)', g.load.bc, '0.005', '')}
+    </div>
+    <div class="row">
+      ${fieldNum('f-barrel', 'Barrel length', g.barrelLength ?? '', '0.5', 'in — optional')}
+      <div class="field"><label>&nbsp;</label><div class="note" id="est-note">${estimateNote(g)}</div></div>
+    </div>
+    <div class="subhead">Distances</div>
+    <div class="row row-3">
+      ${fieldNum('f-d', 'Shoot this target at', g.shootDistance, '1', 'yd', 'min="1"')}
+      ${fieldNum('f-z', 'Rifle zeroed at', g.defaultZero, '1', 'yd', 'min="1"')}
+      <div class="field"><label for="f-click">Turret clicks</label><select id="f-click" data-f="clickValue">${CLICK_VALUES.map(c => `<option value="${c.id}" ${g.clickValue === c.id ? 'selected' : ''}>${c.label}</option>`).join('')}</select></div>
+    </div>
+    <div class="note"><b>“Zeroed at”</b> is the distance where the bullet hits your point of aim once the turrets are set — the scope absorbs all the drop to get there. The target shows where the group must land at the <b>shooting</b> distance for that zero to be true. It is not a holdover chart: if your scope is already zeroed and you want to know where to hold for a far shot, that is “shoot at far, zeroed at near”, and it will usually not fit on paper.</div>`;
+}
+function renderHoldBlock(g) {
+  if (g.sightType !== 'irons') return '';
+  const six = g.hold.type === 'six';
+  return `<div class="field"><label>Which hold do you use with these irons?${g.hold.type ? '' : ' <span class="u" style="color:var(--accent-ink)">required</span>'}</label>${seg('holdType', [{ v: 'center', l: 'Center / combat hold' }, { v: 'six', l: '6 o’clock hold' }], g.hold.type)}</div>
+    ${six ? `<div class="row">${fieldNum('f-hold', 'Hold offset', g.hold.offsetIn, '0.05', 'in below the mark’s center')}<div class="field"><label>&nbsp;</label><div class="note">How far below the mark your front sight sits. It depends on the mark size, so measure it — the diamond is 1.1 in tall. The same hold is assumed at ${fmtYd(g.defaultZero)} yd.</div></div></div>` : ''}`;
+}
+function estimateNote(g) {
+  const p = LOADS.find(l => l.id === g.load.presetId);
+  if (!p) return 'Enter barrel length with a preset load to estimate velocity from length.';
+  if (g.barrelLength == null || g.barrelLength === '' || isNaN(g.barrelLength)) return `Preset velocity is for a ${p.refBarrel} in barrel. Enter yours to estimate; a chronographed value always wins.`;
+  if (g.load.estimated) {
+    const e = estimateVelocity(p, g.barrelLength);
+    const T0 = BAL.totalOffset(g.sightHeight, g.defaultZero, g.shootDistance, { v0: p.v0, bc: p.bc }, 0);
+    const T1 = BAL.totalOffset(g.sightHeight, g.defaultZero, g.shootDistance, { v0: g.load.v0, bc: p.bc }, 0);
+    return `<span class="est"><b>Estimate</b> — about ${p.fpsPerIn} fps per inch from the ${p.refBarrel} in reference${e.outside ? `, <b>outside the ${e.lo}–${e.hi} in range this figure is good for</b>` : ''}. Versus the preset it moves the ${fmtYd(g.shootDistance)} yd offset by ${fmt2(Math.abs(T1 - T0))} in — well under 1 MOA at ${fmtYd(g.defaultZero)} yd. Not critical.</span>`;
+  }
+  return `Velocity entered by hand — it overrides any barrel-length estimate.`;
+}
+
+function onSetupInput(e) {
+  const g = activeGun(); if (!g) return;
+  const el = e.target, f = el.dataset.f; if (!f) return;
+  if (el.tagName === 'SELECT' && e.type === 'input') return;   // selects are handled on 'change' only
+  const v = el.value;
+  let rebuild = false, snap = false;
+  switch (f) {
+    case 'name': g.name = v; break;
+    case 'cartridge': g.cartridge = v; break;
+    case 'shPreset': if (v !== '') { g.sightHeight = +v; $('#f-sh').value = g.sightHeight; } break;
+    case 'f-sh': if (v !== '' && +v > 0) { g.sightHeight = +v; syncPresetSelect('#f-shp', g.sightHeight); } break;
+    case 'loadPreset': {
+      const p = LOADS.find(l => l.id === v);
+      if (p) { g.load = { presetId: p.id, name: p.name, v0: p.v0, bc: p.bc, estimated: false }; if (!g.cartridge || LOADS.some(l => l.cartridge === g.cartridge)) g.cartridge = p.cartridge; if (g.barrelLength != null && g.barrelLength !== '' && Math.abs(g.barrelLength - p.refBarrel) > 0.01) applyEstimate(g, p); }
+      else g.load.presetId = '';
+      rebuild = true; snap = true; break;
+    }
+    case 'loadName': g.load.name = v; break;
+    case 'f-v0': if (+v > 0) { g.load.v0 = +v; g.load.estimated = false; el.classList.remove('est'); $('#est-note').innerHTML = estimateNote(g); } break;
+    case 'f-bc': if (+v > 0) g.load.bc = +v; break;
+    case 'f-barrel': {
+      g.barrelLength = v === '' ? null : +v;
+      const p = LOADS.find(l => l.id === g.load.presetId);
+      if (p && g.barrelLength != null && !isNaN(g.barrelLength)) { applyEstimate(g, p); $('#f-v0').value = Math.round(g.load.v0); $('#f-v0').classList.add('est'); }
+      $('#est-note').innerHTML = estimateNote(g); break;
+    }
+    case 'f-d': if (+v > 0) g.shootDistance = +v; break;
+    case 'f-z': if (+v > 0) g.defaultZero = +v; break;
+    case 'f-hold': g.hold.offsetIn = Math.max(0, +v || 0); break;
+    case 'clickValue': g.clickValue = v; $('#calc-click').value = v; break;
+  }
+  saveDb();
+  if (rebuild) renderSetup();
+  refreshInventoryRow(g);
+  refreshDerived(snap);
+}
+function applyEstimate(g, p) { const e = estimateVelocity(p, g.barrelLength); g.load.v0 = e.v0; g.load.estimated = true; }
+function syncPresetSelect(sel, h) { const s = $(sel); if (!s) return; const m = [...s.options].find(o => o.value !== '' && Math.abs(+o.value - h) < 0.005); s.value = m ? m.value : ''; }
+function onSetupSeg(e) {
+  const btn = e.target.closest('button[data-v]'); if (!btn) return;
+  const segEl = btn.closest('[data-seg]'); const g = activeGun(); if (!segEl || !g) return;
+  const k = segEl.dataset.seg, v = btn.dataset.v;
+  if (k === 'platform') {
+    g.platform = v;
+    const sp = SIGHT_PRESETS[v]; if (!sp.some(p => Math.abs(p.h - g.sightHeight) < 0.005)) g.sightHeight = v === 'handgun' ? 1.0 : 2.6;
+    if (v === 'handgun') { g.sightType = g.sightType || 'irons'; g.defaultZero = Math.min(g.defaultZero, 25); } else { g.defaultZero = Math.max(g.defaultZero, 25); }
+  } else if (k === 'sightType') { if (v === 'irons' && g.sightType !== 'irons') g.hold.type = null;   /* always ask which hold they run */ g.sightType = v; if (v === 'irons' && g.platform === 'handgun' && g.sightHeight >= 0.9) g.sightHeight = 0.65; }
+  else if (k === 'holdType') { g.hold.type = v; }
+  saveDb(); renderSetup(); refreshInventoryRow(g); refreshDerived(true);
+}
+
+/* =====================================================================
+   SECTION 9 — UI: READOUT, WARNINGS, SIDE VIEW, PREVIEW (animated)
+   ===================================================================== */
+const shown = { sh: 0, Z: 0, d: 0, v0: 0, bc: 0, hold: 0 };
+let anim = null, shownInit = false, drawPath = false;
+function targetVals(g) { return { sh: g.sightHeight, Z: g.defaultZero, d: g.shootDistance, v0: g.load.v0, bc: g.load.bc, hold: g.sightType === 'irons' && g.hold.type === 'six' ? +g.hold.offsetIn || 0 : 0 }; }
+function refreshDerived(snap) {
+  const g = activeGun();
+  if (!g) { $('#readout').innerHTML = '<div class="empty">Nothing to compute.</div>'; $('#warnings').innerHTML = ''; $('#traj').innerHTML = ''; $('#sheet').innerHTML = ''; $('#calc-result').innerHTML = ''; return; }
+  const to = targetVals(g);
+  updatePrintButtons(computeTarget(g));
+  if (snap || !shownInit || REDUCED) { Object.assign(shown, to); shownInit = true; drawPath = true; if (anim) { cancelAnimationFrame(anim); anim = null; } drawFrame(); drawPath = false; return; }
+  const from = Object.assign({}, shown), t0 = performance.now(), dur = 300;
+  if (anim) cancelAnimationFrame(anim);
+  const tick = now => {
+    // rAF's timestamp can precede the performance.now() taken when scheduling; clamp so the ease never runs negative
+    const t = Math.min(1, Math.max(0, (now - t0) / dur)), e = 1 - Math.pow(1 - t, 3);
+    for (const k in to) shown[k] = from[k] + (to[k] - from[k]) * e;
+    drawFrame();
+    anim = t < 1 ? requestAnimationFrame(tick) : null;
+  };
+  anim = requestAnimationFrame(tick);
+}
+// Why a target can't be generated, or null when it can.
+function blockReason(T) { return !T ? 'Nothing to print' : T.holdMissing ? 'Choose a hold type first' : !T.layout.ok ? (T.layout.reason === 'model' ? 'Not a zeroing target — no PDF' : 'Won’t fit on paper — no PDF') : null; }
+function updatePrintButtons(T) {
+  const reason = blockReason(T);
+  for (const b of [$('#make-pdf'), $('#make-pdf-modal')]) { b.disabled = !!reason; b.textContent = reason || 'Generate PDF'; b.classList.toggle('accent', !reason); }
+}
+function updateBatchState() {
+  const sel = db.guns.filter(g => db.settings.selected.includes(g.id));
+  const blocked = sel.filter(g => blockReason(computeTarget(g))).length;
+  $('#batch-note').textContent = sel.length ? `${sel.length} selected${blocked ? ` · ${blocked} blocked` : ''}` : 'none selected';
+  for (const b of [$('#make-batch'), $('#make-batch-modal')]) {
+    b.disabled = !sel.length || blocked > 0;
+    b.textContent = blocked ? `Batch blocked — fix ${blocked} target${blocked === 1 ? '' : 's'}` : sel.length ? `Generate batch PDF (${sel.length})` : 'Generate batch PDF';
+  }
+}
+function drawFrame() {
+  const g = activeGun(); if (!g) return;
+  const T = computeTarget(g, shown);
+  renderReadout(T); renderWarnings(T); renderTrajectory(T); renderScope(T); renderPreview(T); renderCalc(T);
+}
+
+const ICON_WARN = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2 L14.5 13.5 H1.5 Z"/><path d="M8 6.5v3.2M8 12h.01"/></svg>';
+const ICON_INFO = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6.3"/><path d="M8 7v4.5M8 4.8h.01"/></svg>';
+function renderReadout(T) {
+  const L = T.layout, r = $('#readout');
+  let cls = '', big = '', desc = '';
+  if (!L.ok && L.reason === 'model') {
+    cls = 'refused';
+    big = `NOT A ZERO`;
+    desc = `A <b>${fmtYd(T.Z)} yd</b> zero needs <b>${L.dropMOA.toFixed(1)} MOA</b> of elevation just for drop (${fmt2(T.dropZ)} in). Scaled onto a ${fmtYd(T.d)} yd target, the printed offset would be mostly ballistic prediction, not sight geometry: a 10% error in velocity or BC moves it <b>${L.modelMOA.toFixed(1)} MOA</b> (${fmt2(0.1 * T.dropZ * T.d / T.Z)} in here). This method only works while geometry dominates — ${L.maxZero ? `with this load, zero at <b>${L.maxZero} yd or less</b>, then dial or hold for ${fmtYd(T.Z)} from real data at distance.` : 'this load is too slow for a short-range zero of any useful length.'}`;
+  } else if (!L.ok) {
+    cls = 'refused';
+    big = `WON’T FIT`;
+    desc = `The holdover at <b>${fmtYd(T.d)} yd</b> for a <b>${fmtYd(T.Z)} yd</b> zero is <b>${fmt2(Math.abs(T.offset))} in ${dirWord(T.offset)}</b> — a holdover problem, not a zeroing target. It needs <b>${fmt2(L.requiredSpan)} in</b> of vertical span; ${L.paper.label} has <b>${fmt2(L.availableSpan)} in</b> even printed landscape. ${T.fit ? `${T.fit.d > T.d ? 'Shoot from farther away' : 'Shoot from closer'} — at <b>${T.fit.d} yd</b> the offset is ${fmt2(Math.abs(T.fit.offset))} in ${dirWord(T.fit.offset)} and fits.` : 'Pick a shooting distance closer to the zero distance.'}`;
+  } else if (L.mode === 'combined') {
+    cls = 'onaim';
+    big = `ON AIM<small>${fmt2(Math.abs(T.offset))}″ ${dirWord(T.offset).toUpperCase()}</small>`;
+    desc = `At <b>${fmtYd(T.d)} yd</b> the point of aim is the point of impact for a <b>${fmtYd(T.Z)} yd</b> zero — the computed offset is inside the mark itself. The target prints one combined mark.`;
+  } else {
+    big = `${fmt2(Math.abs(T.offset))}″<small>${dirWord(T.offset).toUpperCase()}</small>`;
+    desc = `Aim at the diamond; groups must land <b>${fmt2(Math.abs(T.offset))} in ${dirWord(T.offset)}</b> at <b>${fmtYd(T.d)} yd</b> for a <b>${fmtYd(T.Z)} yd</b> zero with the sights <b>${fmtIn(T.sh)} in</b> over bore.${T.hold ? ` Includes your ${fmt2(T.hold)} in 6 o’clock hold.` : ''}`;
+  }
+  r.className = `readout ${cls}`;
+  r.innerHTML = `<div class="big">${big}</div><div class="desc">${desc}</div>
+    <div class="stats" style="grid-column:1/-1">
+      <div class="stat"><div class="k">Drop at ${fmtYd(T.d)} yd</div><div class="v">${fmt2(T.dropD)} <small>in</small></div></div>
+      <div class="stat"><div class="k">Drop at ${fmtYd(T.Z)} yd</div><div class="v">${fmt2(T.dropZ)} <small>in</small></div></div>
+      <div class="stat"><div class="k">Crosses sight line</div><div class="v">${T.nearZero ? fmtYd(T.nearZero) : '—'} <small>yd</small></div></div>
+      <div class="stat"><div class="k">Range error</div><div class="v">${fmt2(T.rangeErrPerYd)} <small>in per yd</small></div></div>
+      <div class="stat"><div class="k">1 MOA at ${fmtYd(T.d)} yd</div><div class="v">${(Math.round(T.moaAtD * 1000) / 1000).toFixed(3)} <small>in</small></div></div>
+      <div class="stat"><div class="k">${T.clickValue.label} clicks per square</div><div class="v">${(0.25 / T.clickRes).toFixed(1)} <small>per 0.25 in · ${(1 / T.clickRes).toFixed(1)} per inch</small></div></div>
+      <div class="stat"><div class="k">Sight-height error</div><div class="v">${fmt2(Math.abs(0.1 * (1 - T.d / T.Z)))} <small>in per 0.1 in</small></div></div>
+    </div>`;
+}
+function renderWarnings(T) {
+  const g = T.gun, L = T.layout, w = [];
+  const item = (kind, html) => w.push(`<div class="warn ${kind}">${kind === 'neutral' || kind === 'calm' ? ICON_INFO : ICON_WARN}<div>${html}</div></div>`);
+  if (T.holdMissing) item('', `<b>Iron sights need a hold type.</b> A 6 o’clock hold stacks on top of the geometric offset; assuming a center hold silently would print a target that is simply wrong. Pick one in Setup before generating.`);
+  if (g.platform === 'handgun' && L.ok && L.mode === 'combined') item('calm', `<b>Don’t bother with an offset for this handgun.</b> The computed offset (${fmt2(Math.abs(T.offset))} in) is smaller than your own dispersion, and the method assumes the sight height is large compared with the correction. At ${fmtYd(T.d)} yd, aim = impact. The page still prints as a single-mark target if you want the grid.`);
+  if (L.ok && L.shrunk) item('neutral', `Grid shrunk to ±${fmt2(L.GH / IN)} in so the aim mark still fits on the page.${L.orient === 'landscape' ? ' Printed <b>landscape</b> — hang the sheet with the marked edge up.' : ''}`);
+  else if (L.ok && L.orient === 'landscape') item('neutral', `Printed <b>landscape</b> to fit the offset — hang the sheet with the marked edge up.`);
+  if (g.load.estimated) item('neutral', `Velocity <b>${Math.round(g.load.v0)} fps is an estimate</b> from a ${g.barrelLength} in barrel. Type a chronographed value to override it.`);
+  if (calibActive()) item('neutral', `Compensating for <b>${esc(db.calibration.printer || 'one printer')}</b> (x ×${db.calibration.x.toFixed(3)}, y ×${db.calibration.y.toFixed(3)}). Every PDF is stamped; it is wrong on any other printer.`);
+  if (L.ok && L.mode === 'two' && T.offset < 0) {
+    const angle = (T.sh + T.dropZ + T.hold) / T.Z, rise = angle * T.d;
+    item('neutral', `<b>Why “high”?</b> To be zeroed at ${fmtYd(T.Z)} yd the barrel is pitched up ${fmt2(angle)} in per yard of range. By ${fmtYd(T.d)} yd the bullet has climbed ${fmt2(rise)} in from the bore line and dropped only ${fmt2(T.dropD)} in, so it is already <b>${fmt2(-T.offset)} in above your line of sight</b>. For the ${fmtYd(T.Z)} yd zero to come out right, the group must land above the aim mark here — you aim <b>under</b>, not over. (The same rifle shot <b>at</b> ${fmtYd(T.Z)} yd with a short zero would need a big holdover; that is the opposite question.)`);
+  }
+  // The spec's premise is that geometry (d/Z scaling) dominates the drop model. Say so when it stops being true.
+  const ballistic = (T.d / T.Z) * T.dropZ, modelErr = 0.1 * ballistic;
+  if (L.ok && (ballistic > 0.5 * T.sh || modelErr > 0.1)) item('', `<b>Long zero — the drop model matters here.</b> ${fmt2(ballistic)} in of this offset comes from the predicted ${fmt2(T.dropZ)} in of drop at ${fmtYd(T.Z)} yd scaled by d/Z, not from sight geometry. A 10% error in velocity or BC moves the printed offset by about <b>${fmt2(modelErr)} in</b>. Treat this as a rough first shot and confirm at distance; the method is at its best for zeros of 25–300 yd.`);
+  $('#warnings').innerHTML = w.join('');
+}
+
+function renderTrajectory(T) {
+  const W = 900, H = 310, pl = 58, pr = 34, ptop = 30, pb = 62;
+  const { d, Z, sh, hold } = T;
+  const maxYd = Math.max(d, Z) * 1.12;
+  const X = yd => pl + yd / maxYd * (W - pl - pr);
+  const n = 140, pts = []; let hmin = -sh, hmax = 0;
+  for (let i = 0; i <= n; i++) { const x = maxYd * i / n; const h = BAL.heightVsLOS(sh, Z, x, T.load, hold); pts.push([x, h]); if (h < hmin) hmin = h; if (h > hmax) hmax = h; }
+  const half = 5.5, ymin = Math.min(hmin, -half) - 1, ymax = Math.max(hmax, half + hold) + 1;
+  const Y = inch => ptop + (ymax - inch) / (ymax - ymin) * (H - ptop - pb);
+  const f = v => Math.round(v * 10) / 10;
+  const s = [];
+  // inch reference lines
+  const span = ymax - ymin, rawStep = span / 7, pow = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const stepIn = [1, 2, 5, 10].map(m => m * pow).find(s => s >= rawStep) || 10 * pow;   // ~7 nice-numbered lines
+  for (let v = Math.ceil(ymin / stepIn) * stepIn; v <= ymax; v += stepIn) { if (Math.abs(v) < 1e-9) continue; s.push(`<line class="grid" x1="${pl}" y1="${f(Y(v))}" x2="${W - pr}" y2="${f(Y(v))}"/><text x="${pl - 6}" y="${f(Y(v)) + 3}" font-size="9" text-anchor="end" class="mono">${v > 0 ? '+' : ''}${v}</text>`); }
+  s.push(`<text x="${pl - 6}" y="${f(Y(0)) + 3}" font-size="9" text-anchor="end" class="mono" font-weight="700">0 in</text>`);
+  // sight line + bore line
+  s.push(`<line class="los" x1="${X(0)}" y1="${f(Y(0))}" x2="${W - pr}" y2="${f(Y(0))}"/>`);
+  const bore = x => -sh + (x / Z) * (sh + T.dropZ + hold);
+  s.push(`<line class="bore" x1="${X(0)}" y1="${f(Y(-sh))}" x2="${W - pr}" y2="${f(Y(bore(maxYd)))}"/>`);
+  // firearm glyph: optic on the sight line, barrel on the bore line, connected
+  const gx = X(0);
+  s.push(`<rect x="${gx - 30}" y="${f(Y(-sh)) - 3}" width="34" height="6" rx="1" fill="#14181C"/>`);
+  s.push(`<rect x="${gx - 26}" y="${f(Y(0)) - 4}" width="18" height="8" rx="2" fill="#14181C"/>`);
+  s.push(`<line x1="${gx - 17}" y1="${f(Y(0)) + 4}" x2="${gx - 17}" y2="${f(Y(-sh)) - 3}" stroke="#14181C" stroke-width="3"/>`);
+  s.push(`<text x="${gx - 30}" y="${f(Y(-sh)) + 18}" font-size="9">muzzle</text>`);
+  s.push(`<text x="${gx + 6}" y="${f(Y(0)) - 6}" font-size="9">sight height ${fmtIn(sh)} in</text>`);
+  // targets
+  const sheet = (x, label, sub, big) => {
+    const top = Y(half + hold), bot = Y(-half + hold), w = big ? 10 : 8;
+    s.push(`<rect class="shadow" x="${f(x - w / 2 + 3)}" y="${f(top + 4)}" width="${w}" height="${f(bot - top)}"/>`);
+    s.push(`<rect class="sheet" x="${f(x - w / 2)}" y="${f(top)}" width="${w}" height="${f(bot - top)}"/>`);
+    s.push(`<text x="${f(x)}" y="${f(top - 8)}" font-size="10" font-weight="700" text-anchor="middle" fill="#14181C">${label}</text>`);
+    if (sub) s.push(`<text x="${f(x)}" y="${f(top - 20)}" font-size="9" text-anchor="middle">${sub}</text>`);
+  };
+  const same = Math.abs(d - Z) < 0.01;
+  const dia = (x, y, r) => `<polygon points="${f(x)},${f(y - r)} ${f(x + r)},${f(y)} ${f(x)},${f(y + r)} ${f(x - r)},${f(y)}" fill="#14181C"/><circle cx="${f(x)}" cy="${f(y)}" r="1.2" fill="#fff"/>`;
+  const ring = (x, y) => `<circle cx="${f(x)}" cy="${f(y)}" r="6" fill="none" stroke="#E4511C" stroke-width="2"/><circle cx="${f(x)}" cy="${f(y)}" r="1.4" fill="#E4511C"/>`;
+  if (!same) {
+    sheet(X(Z), `zero target · ${fmtYd(Z)} yd`, 'aim = impact here', false);
+    s.push(dia(X(Z), Y(hold), 6), ring(X(Z), Y(hold)));
+  }
+  sheet(X(d), same ? `target at zero · ${fmtYd(d)} yd` : `this target · ${fmtYd(d)} yd`, same ? 'aim = impact' : (T.layout.mode === 'combined' ? 'one mark: aim = impact' : `impact ${fmt2(Math.abs(T.offset))} in ${dirWord(T.offset)}`), true);
+  s.push(dia(X(d), Y(hold), 7), ring(X(d), Y(hold - T.offset)));
+  // bullet path
+  const path = pts.map((p, i) => `${i ? 'L' : 'M'}${f(X(p[0]))} ${f(Y(p[1]))}`).join(' ');
+  s.push(`<path class="path${drawPath && !REDUCED ? ' draw' : ''}" pathLength="1" d="${path}"/>`);
+  // near-zero crossing marker
+  if (T.nearZero && T.nearZero < Math.min(d, Z) * 0.85 && !same) s.push(`<circle cx="${f(X(T.nearZero))}" cy="${f(Y(0))}" r="3" fill="#fff" stroke="#14181C" stroke-width="1.2"/><text x="${f(X(T.nearZero))}" y="${f(Y(0)) + 16}" font-size="9" text-anchor="middle">crosses at ${fmtYd(T.nearZero)} yd</text>`);
+  // distance dimensions from the muzzle
+  const dims = same ? [[d, `${fmtYd(d)} yd`]] : [[Math.min(d, Z), `${fmtYd(Math.min(d, Z))} yd`], [Math.max(d, Z), `${fmtYd(Math.max(d, Z))} yd`]];
+  dims.forEach(([yd, label], i) => {
+    const yy = H - pb + 20 + i * 17, x0 = X(0), x1 = X(yd);
+    s.push(`<line class="dim" x1="${x0}" y1="${yy}" x2="${f(x1)}" y2="${yy}"/><line class="dim" x1="${x0}" y1="${yy - 5}" x2="${x0}" y2="${yy + 5}"/><line class="dim" x1="${f(x1)}" y1="${yy - 5}" x2="${f(x1)}" y2="${yy + 5}"/>`);
+    s.push(`<rect x="${f((x0 + x1) / 2 - 24)}" y="${yy - 7}" width="48" height="14" fill="#fff"/><text x="${f((x0 + x1) / 2)}" y="${yy + 4}" font-size="10" text-anchor="middle" class="mono" font-weight="700" fill="#14181C">${label}</text>`);
+  });
+  $('#traj').innerHTML = `<svg class="traj" viewBox="0 0 ${W} ${H}" role="img" aria-label="Side view of the bullet path across the line of sight">${s.join('')}</svg>`;
+}
+
+// ---- Through the scope: sight picture at a chosen range, held over by the computed holdover ----
+// Whitetail deer silhouette, broadside facing left, in INCHES with the origin on the vitals (heart/lung).
+const DEER_PATH = 'M-14,-9 C-19,-11 -23,-14 -26,-18 C-27,-20 -30,-21.5 -34,-20.5 L-37,-18.5 C-35.5,-16.5 -32,-16 -29,-16 C-26,-13 -22,-8 -19,-4 C-17,0 -16,4 -14,9 L-11,9 L-10,24 L-8,24 L-7,10 L-4,9 C4,11 12,11 16,9 L17,10 L18,24 L20,24 L20,9 C23,6 24,0 22,-6 C20,-10 8,-11 -4,-10 C-8,-10 -12,-10 -14,-9 Z M-28.5,-20.5 L-27.5,-26 L-24.5,-21.5 Z M22,-6 L25.5,-3.5 L22.5,-1 Z';
+const DEER_VITALS = [-6, 1], DEER_HOOF_Y = 24;
+const SCOPE_MAGS = [1, 2, 3, 4, 6, 8, 10, 12, 16, 20, 25];
+function scopeMaxYd(load) { let m = 200; for (let D = 250; D <= 1500; D += 50) { if (BAL.velocityAt(D, load) < 700) break; m = D; } return m; }
+function renderScope(T) {
+  const g = T.gun, load = T.load, Z = T.Z, unit = T.clickValue.unit;
+  const min = Math.max(5, Math.round(T.d / 5) * 5);   // paper distance → zero → far: the three-distance picture
+  const max = Math.max(scopeMaxYd(load), Math.ceil(Z / 50) * 50 + 100);
+  const sl = $('#scope-yd'); sl.min = min; sl.max = max;
+  let D = +g.scopeYd || 300; D = Math.min(max, Math.max(min, Math.round(D / 5) * 5)); sl.value = D;
+  $('#scope-yd-out').textContent = `${D} yd`; $('#scope-min').textContent = `${min}`; $('#scope-max').textContent = `${max} yd`;
+  // holdover: how far the bullet is below the crosshair at D (positive = hold over)
+  const hIn = -BAL.heightVsLOS(T.sh, Z, D, load, T.hold);
+  const moaIn = BAL.inchesPerMOA(D), milIn = BAL.inchesPerMIL(D);
+  const holdMOA = hIn / moaIn, holdMil = hIn / milIn, holdU = unit === 'moa' ? holdMOA : holdMil, uLabel = unit === 'moa' ? 'MOA' : 'mil';
+  const clicks = Math.round(Math.abs(holdU) / T.clickValue.value);
+  const v = BAL.velocityAt(D, load), tof = BAL.timeOfFlight(D, load), drop = BAL.dropInches(D, load);
+  const speedTag = v < 1116 ? '<span class="tag warn">subsonic</span>' : v < 1340 ? '<span class="tag warn">transonic</span>' : '<span class="tag">supersonic</span>';
+  // Field of view from magnification: a typical riflescope shows about 105 ft at 100 yd per 1x
+  // (10.5 ft at 10x, 4.2 ft at 25x). Radius in MOA = 105 ft * 12 / 1.047 / 2 / mag.
+  const R = 180, cx = 200, cy = 200;
+  const fovRadiusMOA = mag => 105 * 12 / 1.047 / 2 / mag;
+  const fits = mag => { const r = fovRadiusMOA(mag) * 0.9; return holdMOA + 23 / moaIn <= r && Math.abs(holdMOA - 34 / moaIn) <= r && Math.abs(holdMOA) <= r; };
+  const want = db.settings.scopeMag || 'auto';
+  const mag = want === 'auto' ? ([...SCOPE_MAGS].reverse().find(fits) || 1) : +want;
+  const fitsNow = fits(mag);
+  const RMOA = fovRadiusMOA(mag), RU = unit === 'moa' ? RMOA : RMOA * 1.047 / 3.6;
+  const nice = unit === 'moa' ? [1, 2, 5, 10, 20, 50, 100, 200] : [0.2, 0.5, 1, 2, 5, 10, 20, 50];
+  const hash = nice.find(h => RU / h <= 9) || nice[nice.length - 1];
+  const pxU = R / RU, pxIn = pxU / (unit === 'moa' ? moaIn : milIn);
+  const ty = cy + holdU * pxU;                       // where the vitals sit in the field
+  const magSel = $('#scope-mag'); if (magSel.value !== want) magSel.value = want;
+  magSel.options[0].textContent = want === 'auto' ? `Auto (${mag}×)` : 'Auto';
+  const f = n => Math.round(n * 100) / 100;
+  const s = [];
+  s.push(`<defs><clipPath id="scope-clip"><circle cx="${cx}" cy="${cy}" r="${R}"/></clipPath></defs>`);
+  s.push(`<circle cx="${cx}" cy="${cy}" r="${R + 14}" fill="#14181C"/><circle cx="${cx}" cy="${cy}" r="${R + 6}" fill="#2A3138"/>`);
+  s.push(`<g clip-path="url(#scope-clip)">`);
+  const horizon = ty + DEER_HOOF_Y * pxIn;
+  s.push(`<rect x="0" y="0" width="400" height="400" fill="#F4F7FA"/><rect x="0" y="${f(horizon)}" width="400" height="400" fill="#E2E7E1"/><line x1="0" y1="${f(horizon)}" x2="400" y2="${f(horizon)}" stroke="#C9D2CB" stroke-width="1"/>`);
+  // deer, scaled to its true angular size at D
+  s.push(`<g transform="translate(${f(cx - DEER_VITALS[0] * pxIn)} ${f(ty - DEER_VITALS[1] * pxIn)}) scale(${f(pxIn)})"><path d="${DEER_PATH}" fill="#5B6672" stroke="none"/></g>`);
+  s.push(`<circle cx="${cx}" cy="${f(ty)}" r="${Math.max(2.2, 4 * pxIn)}" fill="none" stroke="#E4511C" stroke-width="1.4"/>`);
+  // reticle: crosshair + numbered hashes (fine, so the target stays readable)
+  s.push(`<g stroke="#14181C" stroke-width="1.4"><line x1="${cx - R}" y1="${cy}" x2="${cx + R}" y2="${cy}"/><line x1="${cx}" y1="${cy - R}" x2="${cx}" y2="${cy + R}"/></g>`);
+  const hashes = [];
+  for (let u = hash, k = 1; u * pxU <= R; u += hash, k++) {
+    const major = k % 2 === 0, len = major ? 9 : 5, dy = u * pxU;
+    hashes.push(`<line x1="${cx - len}" y1="${f(cy + dy)}" x2="${cx + len}" y2="${f(cy + dy)}"/><line x1="${cx - len}" y1="${f(cy - dy)}" x2="${cx + len}" y2="${f(cy - dy)}"/><line x1="${f(cx + dy)}" y1="${cy - len}" x2="${f(cx + dy)}" y2="${cy + len}"/><line x1="${f(cx - dy)}" y1="${cy - len}" x2="${f(cx - dy)}" y2="${cy + len}"/>`);
+    if (major && dy < R - 12) hashes.push(`<text x="${cx + 13}" y="${f(cy + dy + 3)}" font-size="8" fill="#14181C" stroke="none" font-family="ui-monospace,Menlo,monospace">${+(u.toFixed(2))}</text>`);
+  }
+  s.push(`<g stroke="#14181C" stroke-width="1">${hashes.join('')}</g>`);
+  s.push(`<circle cx="${cx}" cy="${cy}" r="1.6" fill="#14181C"/>`);
+  // hold leader + label
+  if (Math.abs(holdU) * pxU > 6) {
+    s.push(`<line x1="${cx}" y1="${cy}" x2="${cx}" y2="${f(ty)}" stroke="#E4511C" stroke-width="1.2" stroke-dasharray="3 3"/>`);
+    const lab = `${hIn >= 0 ? 'hold over' : 'hold under'} ${Math.abs(holdU).toFixed(1)} ${uLabel}`;
+    s.push(`<rect x="${cx - 118}" y="${f((cy + ty) / 2 - 9)}" width="100" height="18" fill="#fff" stroke="#E4511C" stroke-width="1"/><text x="${cx - 68}" y="${f((cy + ty) / 2 + 4)}" font-size="10" font-weight="700" text-anchor="middle" fill="#B23B0F" font-family="Helvetica,Arial,sans-serif">${lab}</text>`);
+  }
+  s.push(`</g>`);
+  // power ring: index ticks and a throw lever — 12 o'clock at 1x, sweeping clockwise to 6 o'clock at max
+  const magIdx = Math.max(0, SCOPE_MAGS.indexOf(mag)), theta = magIdx / (SCOPE_MAGS.length - 1) * 180;
+  s.push(`<g stroke="#8793A0" stroke-width="1">${SCOPE_MAGS.map((m, i) => { const a = i / (SCOPE_MAGS.length - 1) * Math.PI, r0 = R + 15, r1 = i % 5 === 0 ? R + 22 : R + 18; return `<line x1="${f(cx + r0 * Math.sin(a))}" y1="${f(cy - r0 * Math.cos(a))}" x2="${f(cx + r1 * Math.sin(a))}" y2="${f(cy - r1 * Math.cos(a))}"/>`; }).join('')}</g>`);
+  s.push(`<text x="${cx + 8}" y="${cy - R - 24}" font-size="8" fill="#8793A0" font-family="Helvetica,Arial,sans-serif">1×</text><text x="${cx + 8}" y="${cy + R + 30}" font-size="8" fill="#8793A0" font-family="Helvetica,Arial,sans-serif">${SCOPE_MAGS[SCOPE_MAGS.length - 1]}×</text>`);
+  s.push(`<g id="scope-lever" transform="rotate(${f(theta)} ${cx} ${cy})" style="cursor:grab" tabindex="0" role="slider" aria-label="Magnification lever" aria-valuenow="${mag}"><title>Drag to set magnification · double-click for Auto</title><rect x="${cx - 4}" y="${cy - R - 30}" width="8" height="22" rx="2" fill="#2A3138"/><rect x="${cx - 3}" y="${cy - R - 28}" width="6" height="14" rx="1.5" fill="#E4511C"/><circle cx="${cx}" cy="${cy - R - 32}" r="5" fill="#E4511C" stroke="#14181C" stroke-width="1"/></g>`);
+  const la = theta * Math.PI / 180, lr = R + 44;
+  s.push(`<text x="${f(cx + lr * Math.sin(la))}" y="${f(cy - lr * Math.cos(la) + 3)}" font-size="10" font-weight="700" text-anchor="${theta < 15 || theta > 165 ? 'middle' : 'start'}" fill="#14181C" font-family="ui-monospace,Menlo,monospace">${mag}×</text>`);
+  s.push(`<text x="${cx}" y="424" font-size="9" text-anchor="middle" fill="#8793A0" font-family="Helvetica,Arial,sans-serif">${mag}× · field ${(105 / mag).toFixed(1)} ft at 100 yd · ${uLabel} hash every ${+(hash.toFixed(2))} · deer to scale at ${D} yd</text>`);
+  $('#scope').innerHTML = `<svg viewBox="-22 -26 444 462" role="img" aria-label="Sight picture at ${D} yards with holdover">${s.join('')}</svg>`;
+  // lever interaction: drag sets a manual power, double-click returns to Auto
+  const lever = $('#scope-lever');
+  lever.addEventListener('dblclick', () => { db.settings.scopeMag = 'auto'; saveDb(); const gg = activeGun(); if (gg) renderScope(computeTarget(gg, shown)); });
+  lever.addEventListener('keydown', ev => { const i = SCOPE_MAGS.indexOf(mag); const j = ev.key === 'ArrowUp' || ev.key === 'ArrowRight' ? i + 1 : ev.key === 'ArrowDown' || ev.key === 'ArrowLeft' ? i - 1 : null; if (j == null || j < 0 || j >= SCOPE_MAGS.length) return; ev.preventDefault(); db.settings.scopeMag = String(SCOPE_MAGS[j]); saveDb(); renderScope(computeTarget(activeGun(), shown)); $('#scope-lever')?.focus(); });
+  lever.addEventListener('pointerdown', ev => {
+    ev.preventDefault();
+    const move = mv => {
+      const svg = $('#scope svg'); if (!svg) return;
+      const rct = svg.getBoundingClientRect();
+      const sx = (mv.clientX - rct.left) / rct.width * 444 - 22, sy = (mv.clientY - rct.top) / rct.height * 462 - 26;
+      let ang = Math.atan2(sx - cx, -(sy - cy)) * 180 / Math.PI;      // 0 at 12 o'clock, clockwise positive
+      if (ang < 0) ang = ang < -90 ? 180 : 0;
+      const idx = Math.round(ang / 180 * (SCOPE_MAGS.length - 1)), m = String(SCOPE_MAGS[idx]);
+      if (db.settings.scopeMag !== m) { db.settings.scopeMag = m; saveDb(); renderScope(computeTarget(activeGun(), shown)); }
+    };
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+  });
+  const dirWordU = Math.abs(hIn) < 0.005 ? '' : hIn > 0 ? 'UP' : 'DOWN';
+  $('#scope-stats').innerHTML = `
+    <div class="stat"><div class="k">Holdover at ${D} yd</div><div class="v">${fmt2(Math.abs(hIn))} <small>in ${Math.abs(hIn) < 0.005 ? '— on' : hIn > 0 ? 'over' : 'under'}</small></div></div>
+    <div class="stat"><div class="k">In angle</div><div class="v">${Math.abs(holdMOA).toFixed(1)} <small>MOA</small> · ${Math.abs(holdMil).toFixed(2)} <small>mil</small></div></div>
+    <div class="stat"><div class="k">Or dial</div><div class="v">${clicks} <small>clicks ${dirWordU} (${T.clickValue.label})</small></div></div>
+    <div class="stat"><div class="k">Drop from bore</div><div class="v">${drop.toFixed(1)} <small>in</small></div></div>
+    <div class="stat"><div class="k">Velocity</div><div class="v">${Math.round(v)} <small>fps</small>${speedTag}</div></div>
+    <div class="stat"><div class="k">Time of flight</div><div class="v">${tof.toFixed(2)} <small>s</small></div></div>
+    <div class="stat"><div class="k">1 MOA here</div><div class="v">${moaIn.toFixed(2)} <small>in</small></div></div>
+    <div class="stat"><div class="k">Deer vitals (10 in)</div><div class="v">${(10 / moaIn).toFixed(1)} <small>MOA · ${(10 / milIn).toFixed(2)} mil</small></div></div>`;
+  const where = Math.abs(D - Z) < 2.5 ? `at <b>${D} yd</b> — the zero — the bullet meets the crosshair` : `at <b>${D} yd</b> the bullet is ${fmt2(Math.abs(hIn))} in ${hIn >= 0 ? 'below' : 'above'} the crosshair, so you hold the reticle that far ${hIn >= 0 ? 'above' : 'below'} the vitals, or dial it`;
+  $('#scope-note').innerHTML = `The three-distance picture: zero set on paper at <b>${fmtYd(T.d)} yd</b>, dead-on at <b>${fmtYd(Z)} yd</b>, and ${where}. Shown at <b>${mag}×</b>${want === 'auto' ? ' (auto: the highest power that keeps the held-over deer in the field)' : ''}; the deer stands ${(33 / moaIn).toFixed(1)} MOA tall here.${fitsNow ? '' : ` <b>At ${mag}× the hold falls outside the field of view</b> — that is the point where you dial instead, or drop to a lower power.`} Flat-fire, standard atmosphere, no wind: confirm with real shots before you trust it on an animal.${v < 1340 ? ' Past the transonic zone the bullet gets unstable and the drop model gets worse — this is a rough picture, not DOPE.' : ''}`;
+}
+// The Print-panel thumbnail always mirrors the active gun's page. The modal shows whatever page
+// of the would-be PDF is selected (cover, then one page per batch-selected gun).
+function renderPreview(T) {
+  const v = pageView(T), th = $('#thumb-sheet');
+  th.className = 'thumb-sheet' + (v.landscape ? ' landscape' : '');
+  th.innerHTML = v.html;
+  if ($('#preview-dlg').open) renderModalPage();
+  else { const box = $('#sheet'); box.className = 'sheet-box' + (v.landscape ? ' landscape' : ''); box.innerHTML = v.html; $('#preview-hint').textContent = v.hint; }
+}
+let pvIdx = 0;
+function pvSet() { const sel = db.guns.filter(g => db.settings.selected.includes(g.id)); const a = activeGun(); return sel.length ? sel : (a ? [a] : []); }
+function pvPages() {
+  const a = activeGun();
+  const targets = pvSet().map(g => ({ kind: 'target', gun: g, T: a && g.id === a.id ? computeTarget(g, shown) : computeTarget(g) }));
+  return [{ kind: 'cover', targets: targets.map(t => t.T) }, ...targets];
+}
+function coverSvg(targets) {
+  const paper = PAPERS[db.settings.paper] || PAPERS.letter, be = svgBackend();
+  let n = 0;
+  const newPage = () => { n++; return makePage(n === 1 ? be : svgBackend(), paper, 'portrait', calibActive() ? db.calibration : null); };
+  drawCover({ newPage }, targets.filter(t => t.layout.ok), { paper: db.settings.paper, calibStamp: calibStamp() });
+  return { svg: be.svg(paper.w, paper.h), extra: n - 1 };
+}
+function renderModalPage() {
+  const pages = pvPages(), box = $('#sheet');
+  pvIdx = Math.max(0, Math.min(pages.length - 1, pvIdx));
+  const p = pages[pvIdx];
+  let html, landscape = false, hint;
+  if (p.kind === 'cover') {
+    const printable = p.targets.filter(t => t.layout.ok).length, c = coverSvg(p.targets);
+    html = c.svg; hint = `Cover — how to use, offsets for ${printable} target${printable === 1 ? '' : 's'}${c.extra ? ` (continues on ${c.extra} more page${c.extra === 1 ? '' : 's'})` : ''}`;
+  } else {
+    const v = pageView(p.T); html = v.html; landscape = v.landscape;
+    hint = `${p.T.name} · ${v.hint}${p.T.layout.ok ? '' : ' · skipped in the PDF'}`;
+  }
+  box.className = 'sheet-box' + (landscape ? ' landscape' : ''); box.innerHTML = html;
+  $('#preview-hint').textContent = hint;
+  $('#pv-page').textContent = `${pvIdx + 1} / ${pages.length}`;
+  $('#pv-prev').disabled = pvIdx === 0; $('#pv-next').disabled = pvIdx >= pages.length - 1;
+}
+function pageView(T) {
+  const L = T.layout;
+  if (!L.ok) {
+    const PW = L.paper.w, PH = L.paper.h, cx = PW / 2, cy = PH / 2;
+    const lines = L.reason === 'model' ? [
+      `A ${fmtYd(T.Z)} yd zero from ${fmtYd(T.d)} yd is not a zeroing target — it is ${L.dropMOA.toFixed(1)} MOA of drop prediction.`,
+      `A 10% velocity or BC error would move the printed offset ${L.modelMOA.toFixed(1)} MOA. Geometry no longer dominates.`,
+      L.maxZero ? `Zero at ${L.maxZero} yd or less with this load, then dial or hold for ${fmtYd(T.Z)} yd from real data.` : `This load is too slow for a short-range zero of useful length.`,
+    ] : [
+      `Holdover at ${fmtYd(T.d)} yd for a ${fmtYd(T.Z)} yd zero: ${fmt2(Math.abs(T.offset))} in ${dirWord(T.offset)}`,
+      `Needs ${fmt2(L.requiredSpan)} in of vertical span — ${L.paper.label} has ${fmt2(L.availableSpan)} in even landscape.`,
+      T.fit ? `Shoot from ${T.fit.d} yd instead: the offset is ${fmt2(Math.abs(T.fit.offset))} in ${dirWord(T.fit.offset)} and fits.` : `Pick a shooting distance closer to the zero distance.`,
+    ];
+    const title = L.reason === 'model' ? 'NOT A ZEROING TARGET — NO PDF' : 'WON’T FIT ON PAPER — NO PDF';
+    return { landscape: false, hint: 'refused — nothing is ever clipped silently', html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${PW} ${PH}" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="Not printable">
+      <rect width="${PW}" height="${PH}" fill="#fff"/>
+      <g stroke="#E4511C" stroke-width="18" stroke-linecap="round" opacity=".9"><line x1="${0.12 * PW}" y1="${0.14 * PH}" x2="${0.88 * PW}" y2="${0.86 * PH}"/><line x1="${0.88 * PW}" y1="${0.14 * PH}" x2="${0.12 * PW}" y2="${0.86 * PH}"/></g>
+      <rect x="${cx - 250}" y="${cy - 62}" width="500" height="124" fill="#fff" stroke="#E4511C" stroke-width="2"/>
+      <text x="${cx}" y="${cy - 26}" text-anchor="middle" font-size="26" font-weight="700" fill="#B23B0F">${title}</text>
+      ${lines.map((s, i) => `<text x="${cx}" y="${cy + 2 + i * 18}" text-anchor="middle" font-size="11" fill="#14181C">${esc(s)}</text>`).join('')}
+    </svg>` };
+  }
+  return { landscape: L.orient === 'landscape', hint: `${L.paper.label} ${L.orient} · exact PDF geometry`, html: renderTargetSvg(T, db.calibration) };
+}
+
+/* =====================================================================
+   SECTION 10 — CLICK CALCULATOR + CALIBRATION + OUTPUT
+   ===================================================================== */
+function renderCalc(T) {
+  const g = T.gun, d = T.d, cv = clickValueById($('#calc-click').value || g.clickValue);
+  $('#calc-dist').textContent = `at ${fmtYd(d)} yd (from the target)`;
+  const mh = +$('#miss-h').value || 0, mv = +$('#miss-v').value || 0;
+  const h = clickCorrection(mh, d, cv), v = clickCorrection(mv, d, cv);
+  const unitLabel = cv.unit === 'moa' ? 'MOA' : 'mil';
+  const row = (lab, c, miss, posWord, negWord) => {
+    const dir = miss > 0 ? posWord : miss < 0 ? negWord : '';
+    return `<div class="dir"><span class="eyebrow">${lab}</span><span class="clicks">${c.n}<span>${c.n === 1 ? 'click' : 'clicks'} ${dir}</span></span><span class="ang">${fmt2(Math.abs(miss))} in = ${(Math.round(Math.abs(c.units) * 10) / 10).toFixed(1)} ${unitLabel}</span></div>`;
+  };
+  let out = row('Windage', h, mh, 'LEFT', 'RIGHT') + row('Elevation', v, mv, 'DOWN', 'UP');
+  out += `<div class="res-line"><span>1 click at ${fmtYd(d)} yd</span><b>${(Math.round(h.resolution * 1000) / 1000).toFixed(3)} in</b></div>`;
+  if (h.resolution < 0.05) out += `<div class="warn">${ICON_WARN}<div><b>Finer than you can read on paper.</b> Below ~0.05 in you are measuring your own dispersion, not your zero — stop once the group center is inside the circle and refine at ${fmtYd(g.defaultZero)} yd.</div></div>`;
+  $('#calc-result').innerHTML = out;
+}
+function renderCalibration() {
+  const c = db.calibration;
+  $('#cal-printer').value = c.printer || '';
+  $('#cal-status').innerHTML = calibActive()
+    ? `<div class="warn neutral">${ICON_INFO}<div>Compensating: <b>x ×${c.x.toFixed(3)}</b>, <b>y ×${c.y.toFixed(3)}</b> for ${esc(c.printer || 'one printer')}. The next print’s rulers should read 4.00 in.</div></div>`
+    : `<div class="note">Not compensating (factors 1.000 / 1.000).</div>`;
+}
+function applyCalibration() {
+  const h = +$('#cal-h').value, v = +$('#cal-v').value;
+  db.calibration.printer = $('#cal-printer').value.trim();
+  db.calibration.x = h > 2 && h < 6 ? 4 / h : 1;
+  db.calibration.y = v > 2 && v < 6 ? 4 / v : 1;
+  saveDb(); renderCalibration(); refreshDerived(true);
+}
+function clearCalibration() { db.calibration = { printer: db.calibration.printer, x: 1, y: 1 }; $('#cal-h').value = ''; $('#cal-v').value = ''; saveDb(); renderCalibration(); refreshDerived(true); }
+
+function generate(guns, btn) {
+  if (!window.jspdf) { showPdfBanner(); return; }
+  const targets = guns.map(g => computeTarget(g));
+  const blocked = targets.filter(t => t.holdMissing || !t.layout.ok);
+  if (blocked.length) { alert(blocked.map(t => `${t.name}: ${t.holdMissing ? 'choose a hold type for the iron sights' : `offset won’t fit on ${t.layout.paper.label}${t.fit ? ` — try ${t.fit.d} yd` : ''}`}`).join('\n')); return; }
+  const doc = buildPdf(targets, { paper: db.settings.paper, calib: calibActive() ? db.calibration : null, calibStamp: calibStamp() });
+  const fname = (targets.length === 1 ? `${targets[0].gun.name}-${fmtYd(targets[0].d)}yd-for-${fmtYd(targets[0].Z)}yd-zero` : `zeroing-targets-${targets.length}`).replace(/[^\w.-]+/g, '_') + '.pdf';
+  doc.save(fname);
+  const old = btn.textContent; btn.textContent = 'Saved ✓'; btn.classList.add('done');
+  setTimeout(() => { btn.textContent = old; btn.classList.remove('done'); }, 1400);
+}
+function exportJson() {
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `zeroing-inventory-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function importJson(file) {
+  const rd = new FileReader();
+  rd.onload = () => {
+    let raw; try { raw = JSON.parse(rd.result); } catch (e) { alert('That file is not valid JSON.'); return; }
+    if (!raw || !Array.isArray(raw.guns)) { alert('That file does not contain a firearm inventory.'); return; }
+    confirmDlg('Replace inventory?', `This will replace your ${db.guns.length} firearm${db.guns.length === 1 ? '' : 's'} with the ${raw.guns.length} in the file. Export first if you want a backup.`, () => {
+      db = migrate(raw); db.settings.activeId = db.guns[0]?.id || null; saveDb(); renderAll(true);
+    });
+  };
+  rd.readAsText(file);
+}
+function confirmDlg(title, body, onYes) {
+  $('#confirm-title').textContent = title; $('#confirm-body').textContent = body;
+  const dlg = $('#confirm-dlg'), yes = $('#confirm-yes');
+  yes.onclick = () => { dlg.close(); onYes(); };
+  dlg.showModal();
+}
+function showPdfBanner() { const b = $('#pdf-banner'); b.className = 'pdf-banner show'; b.innerHTML = '<b>PDF engine not loaded.</b> This page pulls jsPDF from a CDN once and the browser caches it. Open the file with an internet connection one time, then it works offline. Everything else on the page works now.'; }
+
+/* =====================================================================
+   SECTION 11 — SELF-TEST (golden vectors + layout + click assertions)
+   ===================================================================== */
+function selfTest() {
+  const R = [], ok = (name, pass, detail) => R.push({ name, pass, detail });
+  const near = (a, b, tol) => Math.abs(a - b) <= tol;
+  const cases = [
+    ['5.56 55 gr @ 3000, Z 100', { v0: 3000, bc: 0.243 }, 100, 2.14],
+    ['9mm 115 gr @ 1300, Z 25', { v0: 1300, bc: 0.145 }, 25, 1.41],
+    ['300 BLK 125 gr @ 2175, Z 50', { v0: 2175, bc: 0.320 }, 50, 1.92],
+    ['300 BLK 220 gr @ 1050, Z 50', { v0: 1050, bc: 0.300 }, 50, 1.42],
+  ];
+  for (const [n, load, Z, want] of cases) { const got = BAL.geomOffset(2.6, Z, 10, load); ok(`golden: ${n}`, near(got, want, 0.03), `${got.toFixed(3)} vs ${want} (±0.03)`); }
+  const s1 = BAL.geomOffset(2.9, 100, 10, cases[0][1]), s2 = BAL.geomOffset(2.9, 25, 10, cases[1][1]);
+  ok('sensitivity: SH 2.9 → 100 yd zero = 2.41', near(s1, 2.41, 0.03), s1.toFixed(3));
+  ok('sensitivity: SH 2.9 → 25 yd zero = 1.59', near(s2, 1.59, 0.03), s2.toFixed(3));
+  ok('MOA/mil at 100 yd = 1.047 / 3.600', near(BAL.inchesPerMOA(100), 1.047, 1e-9) && near(BAL.inchesPerMIL(100), 3.6, 1e-9), '');
+  const Lp = layoutFor(2.14, 'letter'); ok('layout: reference geometry (CX 4.25, IMP_Y 5.15, GW 3.30, GH 3.75)', Lp.ok && near(Lp.CX / IN, 4.25, 1e-4) && near(Lp.IMP_Y / IN, 5.15, 1e-4) && near(Lp.GW / IN, 3.30, 1e-4) && near(Lp.GH / IN, 3.75, 1e-4), Lp.ok ? `${(Lp.CX / IN).toFixed(2)}, ${(Lp.IMP_Y / IN).toFixed(2)}, ${(Lp.GW / IN).toFixed(2)}, ${(Lp.GH / IN).toFixed(2)}` : 'failed');
+  const Ln = layoutFor(-1.0, 'letter'); ok('layout: negative offset puts aim below impact ("high")', Ln.ok && Ln.mode === 'two' && Ln.AIM_Y < Ln.IMP_Y, '');
+  const Lc = layoutFor(0.2, 'letter'); ok('layout: 0.2 in → single combined mark', Lc.ok && Lc.mode === 'combined', '');
+  const Ls = layoutFor(4.0, 'letter'); ok('layout: 4.0 in → grid shrinks, still portrait', Ls.ok && Ls.shrunk && Ls.orient === 'portrait', Ls.ok ? `GH ${(Ls.GH / IN).toFixed(2)} in` : '');
+  const Ll = layoutFor(6.0, 'letter'); ok('layout: 6.0 in → falls back to landscape', Ll.ok && Ll.orient === 'landscape', '');
+  const Lr = layoutFor(9.0, 'letter'); ok('layout: 9.0 in → refused with required span', !Lr.ok && Lr.requiredSpan > Lr.availableSpan, Lr.ok ? '' : `needs ${Lr.requiredSpan.toFixed(2)} in, has ${Lr.availableSpan.toFixed(2)} in`);
+  const m700 = 0.1 * BAL.dropInches(700, cases[0][1]) / 700 / 0.01047, m300 = 0.1 * BAL.dropInches(300, cases[0][1]) / 300 / 0.01047;
+  ok('validity: 5.56 zeroed at 700 yd is model-dominated (refused); 300 yd is not', m700 > MODEL_MAX_MOA && m300 <= MODEL_MAX_MOA, `${m700.toFixed(1)} MOA vs ${m300.toFixed(1)} MOA, limit ${MODEL_MAX_MOA}`);
+  const La = layoutFor(2.14, 'a4'); ok('layout: A4 computed from its own page size (narrower grid, taller band)', La.ok && near(La.CX / IN, 595.28 / 72 / 2, 1e-4) && La.GW < Lp.GW && La.GH > Lp.GH, `A4 CX ${(La.CX / IN).toFixed(3)} in, GW ${(La.GW / IN).toFixed(2)}, GH ${(La.GH / IN).toFixed(2)}`);
+  const c = clickCorrection(0.30, 10, clickValueById('0.25moa')); ok('clicks: +0.30 in right @ 10 yd, 1/4 MOA → 11 clicks LEFT, 2.9 MOA', c.n === 11 && near(c.units, 2.865, 0.01), `${c.n} clicks, ${c.units.toFixed(2)} MOA`);
+  ok('resolution warning fires at 10 yd with 1/4 MOA (0.026 in < 0.05)', c.resolution < 0.05 && near(c.resolution, 0.0262, 0.001), `${c.resolution.toFixed(4)} in/click`);
+  const hg = BAL.geomOffset(0.65, 25, 10, { v0: 1150, bc: 0.145 }); ok('handgun irons (SH 0.65, 25 yd zero) → combined mark at 10 yd', Math.abs(hg) < COMBINE_BELOW, `${hg.toFixed(2)} in`);
+  const h0 = BAL.totalOffset(0.65, 25, 10, { v0: 1150, bc: 0.145 }, 0), h6 = BAL.totalOffset(0.65, 25, 10, { v0: 1150, bc: 0.145 }, 2);
+  ok('6 o’clock hold changes the offset', Math.abs(h6 - h0) > 0.5, `${h0.toFixed(2)} → ${h6.toFixed(2)} in`);
+  const t = { name: 'T', d: 10, Z: 100, sh: 2.6, loadLabel: 'x', offset: 2.14, layout: Lp, varianceRows: [{ sh: 2.6, off: 2.14, user: true }], hold: 0, holdType: 'center', calibStamp: '' };
+  let svgOk = false; try { svgOk = renderTargetSvg(t, { x: 1, y: 1 }).length > 2000; } catch (e) { console.error(e); }
+  ok('render: target draws through the shared backend', svgOk, '');
+  return R;
+}
+function runSelfTest() {
+  const R = selfTest(), fails = R.filter(r => !r.pass).length, chip = $('#selftest-chip');
+  chip.className = 'chip clickable ' + (fails ? 'bad' : 'ok');
+  chip.lastElementChild.textContent = fails ? `self-test ${fails} failing` : `self-test ${R.length}/${R.length} ✓`;
+  $('#selftest-out').innerHTML = R.map(r => `<div class="${r.pass ? 'p' : 'f'}">${r.pass ? 'PASS' : 'FAIL'}  ${esc(r.name)}${r.detail ? '  —  ' + esc(r.detail) : ''}</div>`).join('');
+  console.log('[self-test]', R.map(r => `${r.pass ? 'PASS' : 'FAIL'} ${r.name} ${r.detail}`).join('\n'));
+  return fails === 0;
+}
+
+/* =====================================================================
+   SECTION 12 — WIRING
+   ===================================================================== */
+function renderAll(snap) {
+  if (!db.settings.activeId || !db.guns.some(g => g.id === db.settings.activeId)) db.settings.activeId = db.guns[0]?.id || null;
+  $('#paper').value = db.settings.paper;
+  renderInventory(); renderSetup(); renderCalibration();
+  const g = activeGun(); if (g) $('#calc-click').value = g.clickValue;
+  refreshDerived(snap);
+}
+function setActive(id) { if (db.settings.activeId === id) return; db.settings.activeId = id; saveDb(); renderInventory(); renderSetup(); const g = activeGun(); if (g) $('#calc-click').value = g.clickValue; refreshDerived(true); $('#setup-panel').classList.remove('fade-in'); void $('#setup-panel').offsetWidth; $('#setup-panel').classList.add('fade-in'); }
+
+document.addEventListener('DOMContentLoaded', () => {
+  $('#calc-click').innerHTML = CLICK_VALUES.map(c => `<option value="${c.id}">${c.label}</option>`).join('');
+  // inventory
+  $('#gun-list').addEventListener('click', e => {
+    const del = e.target.closest('[data-del]'); if (del) { const g = db.guns.find(x => x.id === del.dataset.del); confirmDlg(`Delete ${g.name}?`, 'This removes it from the inventory in this browser. Export JSON first if you want to keep a copy.', () => { db.guns = db.guns.filter(x => x.id !== g.id); db.settings.selected = db.settings.selected.filter(x => x !== g.id); if (db.settings.activeId === g.id) db.settings.activeId = db.guns[0]?.id || null; saveDb(); renderAll(true); }); return; }
+    const sel = e.target.closest('[data-sel]'); if (sel) { const id = sel.dataset.sel; db.settings.selected = sel.checked ? [...new Set([...db.settings.selected, id])] : db.settings.selected.filter(x => x !== id); saveDb(); updateBatchState(); return; }
+    const card = e.target.closest('.gun'); if (card) setActive(card.dataset.id);
+  });
+  $('#gun-list').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('gun')) { e.preventDefault(); setActive(e.target.dataset.id); } });
+  $('#add-gun').addEventListener('click', () => { const g = makeGun({ name: `Rifle ${db.guns.length + 1}` }); db.guns.push(g); db.settings.activeId = g.id; saveDb(); renderAll(true); $('#f-name')?.focus(); $('#f-name')?.select(); });
+  $('#export-json').addEventListener('click', exportJson);
+  $('#import-json').addEventListener('click', () => $('#import-file').click());
+  $('#import-file').addEventListener('change', e => { if (e.target.files[0]) importJson(e.target.files[0]); e.target.value = ''; });
+  // setup
+  $('#setup-form').addEventListener('input', onSetupInput);
+  $('#setup-form').addEventListener('change', e => { if (e.target.tagName === 'SELECT') onSetupInput(e); });
+  $('#setup-form').addEventListener('click', onSetupSeg);
+  // print
+  $('#paper').addEventListener('change', e => { db.settings.paper = e.target.value; saveDb(); renderInventory(); refreshDerived(true); });
+  $('#make-pdf').addEventListener('click', e => { const g = activeGun(); if (g) generate([g], e.currentTarget); });
+  $('#make-batch').addEventListener('click', e => { const guns = db.guns.filter(g => db.settings.selected.includes(g.id)); if (guns.length) generate(guns, e.currentTarget); });
+  // calculator
+  for (const id of ['#miss-h', '#miss-v']) $(id).addEventListener('input', () => { const g = activeGun(); if (g) renderCalc(computeTarget(g, shown)); });
+  $('#calc-click').addEventListener('change', e => { const g = activeGun(); if (g) { g.clickValue = e.target.value; saveDb(); const f = $('#f-click'); if (f) f.value = g.clickValue; renderCalc(computeTarget(g, shown)); } });
+  // print thumbnail → full-size preview modal
+  const pv = $('#preview-dlg');
+  const openPreview = () => {
+    if (pv.open) return;
+    const a = activeGun(), i = pvSet().findIndex(g => a && g.id === a.id);
+    pvIdx = i >= 0 ? i + 1 : 0;              // open on the active gun's page (cover is page 1)
+    pv.showModal(); renderModalPage();
+  };
+  const step = d => { pvIdx += d; renderModalPage(); };
+  $('#thumb').addEventListener('click', openPreview);
+  $('#thumb').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPreview(); } });
+  $('#pv-prev').addEventListener('click', () => step(-1));
+  $('#pv-next').addEventListener('click', () => step(1));
+  pv.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); } else if (e.key === 'ArrowRight') { e.preventDefault(); step(1); } });
+  $('#preview-close').addEventListener('click', () => pv.close());
+  pv.addEventListener('click', e => { if (e.target === pv) pv.close(); });   // click on the backdrop closes
+  pv.addEventListener('close', () => { const g = activeGun(); if (g) renderPreview(computeTarget(g, shown)); });
+  $('#make-pdf-modal').addEventListener('click', e => { const g = activeGun(); if (g) generate([g], e.currentTarget); });
+  $('#make-batch-modal').addEventListener('click', e => { const guns = db.guns.filter(g => db.settings.selected.includes(g.id)); if (guns.length) generate(guns, e.currentTarget); });
+  // scope holdover slider + magnification
+  $('#scope-mag').innerHTML = `<option value="auto">Auto</option>` + SCOPE_MAGS.map(m => `<option value="${m}">${m}×</option>`).join('');
+  $('#scope-yd').addEventListener('input', e => { const g = activeGun(); if (!g) return; g.scopeYd = +e.target.value; saveDb(); renderScope(computeTarget(g, shown)); });
+  $('#scope-mag').addEventListener('change', e => { db.settings.scopeMag = e.target.value; saveDb(); const g = activeGun(); if (g) renderScope(computeTarget(g, shown)); });
+  // calibration
+  $('#cal-apply').addEventListener('click', applyCalibration);
+  $('#cal-clear').addEventListener('click', clearCalibration);
+  $('#cal-printer').addEventListener('input', e => { db.calibration.printer = e.target.value; saveDb(); });
+  // chips
+  $('#selftest-chip').addEventListener('click', () => $('#selftest-dlg').showModal());
+  const pdfChip = $('#pdf-chip');
+  if (window.jspdf) { pdfChip.className = 'chip ok'; pdfChip.lastElementChild.textContent = 'PDF engine ready'; }
+  else { pdfChip.className = 'chip bad'; pdfChip.lastElementChild.textContent = 'PDF engine missing'; showPdfBanner(); }
+
+  runSelfTest();
+  renderAll(true);
+  const c = db.calibration; if (calibActive()) { $('#cal-h').value = (4 / c.x).toFixed(2); $('#cal-v').value = (4 / c.y).toFixed(2); }
+});
+</script>
+</body>
+</html>
