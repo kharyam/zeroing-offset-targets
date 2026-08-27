@@ -76,7 +76,13 @@ a{color:inherit}
 .panel-head .hint{font-size:.72rem;color:var(--ink-3)}
 
 /* ---------- inventory ---------- */
-.gun-list{display:flex;flex-direction:column;gap:.35rem}
+.gun-list{display:flex;flex-direction:column;gap:.35rem;overflow-y:auto;overflow-x:hidden;padding:2px .35rem 2px 2px;margin-right:-.35rem;scrollbar-width:thin;scrollbar-color:var(--accent) transparent;scroll-behavior:smooth}
+.gun-list::-webkit-scrollbar{width:6px}
+.gun-list::-webkit-scrollbar-track{background:transparent}
+.gun-list::-webkit-scrollbar-thumb{background:var(--accent);border-radius:3px}
+.gun-list::-webkit-scrollbar-thumb:hover{background:var(--accent-ink)}
+.gun-list::-webkit-scrollbar-button{display:none;height:0;width:0}
+.gun-list.scrolls{border-bottom:1px solid var(--rule-2)}
 .gun{
   position:relative;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.6rem;
   padding:.55rem .6rem .55rem .8rem;border:1px solid transparent;border-radius:3px;cursor:pointer;
@@ -1121,6 +1127,11 @@ function renderInventory() {
       <div><div class="gname">${esc(g.name)} <span style="font-weight:400;color:var(--ink-2)">/ ${esc(g.cartridge)}</span></div><div class="gsub num">${gunSummary(g)}</div></div>
       <button class="gdel" data-del="${g.id}" title="Delete" aria-label="Delete ${esc(g.name)}">×</button>
     </div>`).join('');
+  // show up to five firearms, then scroll
+  const cards = [...list.querySelectorAll('.gun')], gap = 0.35 * 15;
+  if (cards.length > 5) { const h = cards.slice(0, 5).reduce((a, c) => a + c.offsetHeight, 0) + 4 * gap + 4 + gap / 2; list.style.maxHeight = h + 'px'; list.classList.add('scrolls'); }
+  else { list.style.maxHeight = ''; list.classList.remove('scrolls'); }
+  list.querySelector('.gun.active')?.scrollIntoView({ block: 'nearest' });
   updateBatchState();
 }
 function refreshInventoryRow(g) { const el = $(`.gun[data-id="${g.id}"]`); if (!el) return; el.querySelector('.gname').innerHTML = `${esc(g.name)} <span style="font-weight:400;color:var(--ink-2)">/ ${esc(g.cartridge)}</span>`; el.querySelector('.gsub').innerHTML = gunSummary(g); }
