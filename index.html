@@ -1371,9 +1371,12 @@ function renderTrajectory(T) {
   const { d, Z, sh, hold } = T;
   const dists = [...new Set([...(T.gun.shootDistances || []), d].map(x => Math.round(x * 10) / 10))].sort((a, b) => a - b);
   const dimList = [...new Set([...dists.filter(x => Math.abs(x - Z) >= 0.01), Z])].sort((a, b) => a - b);
-  const W = 900, pl = 58, pr = 34, ptop = 30, pb = 30 + 17 * dimList.length, H = 248 + pb;
+  const W = 900, pl = 58, pr = 34, pb = 30 + 17 * dimList.length;
   const maxYd = Math.max(...dists, Z) * 1.12;
   const X = yd => pl + yd / maxYd * (W - pl - pr);
+  const paper = dists.filter(x => Math.abs(x - Z) >= 0.01);
+  const lifts = paper.map((dd, i) => i > 0 && X(dd) - X(paper[i - 1]) < 110 ? 26 * (i % 2) : 0);   // stagger crowded labels
+  const ptop = 30 + Math.max(0, ...lifts), H = 248 + pb + Math.max(0, ...lifts);
   const n = 140, pts = []; let hmin = -sh, hmax = 0;
   for (let i = 0; i <= n; i++) { const x = maxYd * i / n; const h = BAL.heightVsLOS(sh, Z, x, T.load, hold); pts.push([x, h]); if (h < hmin) hmin = h; if (h > hmax) hmax = h; }
   const half = 5.5, ymin = Math.min(hmin, -half) - 1, ymax = Math.max(hmax, half + hold) + 1;
@@ -1400,10 +1403,11 @@ function renderTrajectory(T) {
   const sheet = (x, label, sub, big, lift = 0) => {
     const top = Y(half + hold), bot = Y(-half + hold), w = big ? 10 : 8;
     s.push(`<rect class="shadow" x="${f(x - w / 2 + 3)}" y="${f(top + 4)}" width="${w}" height="${f(bot - top)}"/>`);
-    s.push(`<rect class="sheet" x="${f(x - w / 2)}" y="${f(top)}" width="${w}" height="${f(bot - top)}"${big ? '' : ' opacity=".75"'}/>`);
+    s.push(`<rect class="sheet" x="${f(x - w / 2)}" y="${f(top)}" width="${w}" height="${f(bot - top)}"${big ? '' : ' opacity=".45"'}/>`);
+    if (big) s.push(`<polygon points="${f(x)},${f(bot + 5)} ${f(x - 7)},${f(bot + 16)} ${f(x + 7)},${f(bot + 16)}" fill="#E4511C"/>`);   // marks the page being previewed
     if (lift) s.push(`<line x1="${f(x)}" y1="${f(top)}" x2="${f(x)}" y2="${f(top - lift + 2)}" stroke="#C9D2CB" stroke-width="1"/>`);
-    s.push(`<text x="${f(x)}" y="${f(top - 8 - lift)}" font-size="10" font-weight="${big ? 700 : 400}" text-anchor="middle" fill="#14181C">${label}</text>`);
-    if (sub) s.push(`<text x="${f(x)}" y="${f(top - 20 - lift)}" font-size="9" text-anchor="middle">${sub}</text>`);
+    s.push(`<text x="${f(x)}" y="${f(top - 8 - lift)}" font-size="10" font-weight="${big ? 700 : 400}" text-anchor="middle" fill="${big ? '#14181C' : '#8793A0'}">${label}</text>`);
+    if (sub) s.push(`<text x="${f(x)}" y="${f(top - 20 - lift)}" font-size="9" text-anchor="middle"${big ? '' : ' fill="#8793A0"'}>${sub}</text>`);
   };
   const same = Math.abs(d - Z) < 0.01;
   const dia = (x, y, r) => `<polygon points="${f(x)},${f(y - r)} ${f(x + r)},${f(y)} ${f(x)},${f(y + r)} ${f(x - r)},${f(y)}" fill="#14181C"/><circle cx="${f(x)}" cy="${f(y)}" r="1.2" fill="#fff"/>`;
@@ -1412,13 +1416,11 @@ function renderTrajectory(T) {
   sheet(X(Z), `${atZero ? 'target at zero' : 'zero target'} · ${fmtYd(Z)} yd`, 'aim = impact here', same);
   s.push(dia(X(Z), Y(hold), same ? 7 : 6), ring(X(Z), Y(hold)));
   // one paper target per shooting distance; the previewed one is bold, labels stagger when crowded
-  const paper = dists.filter(x => Math.abs(x - Z) >= 0.01);
   paper.forEach((dd, i) => {
     const isP = Math.abs(dd - d) < 0.01;
     const off = isP ? T.offset : BAL.totalOffset(sh, Z, dd, T.load, hold);
-    const crowded = i > 0 && X(dd) - X(paper[i - 1]) < 110;
-    sheet(X(dd), `${isP ? 'this page' : 'page'} · ${fmtYd(dd)} yd`, isP && T.layout.mode === 'combined' ? 'one mark: aim = impact' : `impact ${fmt2(Math.abs(off))} in ${dirWord(off)}`, isP, crowded ? 26 * (i % 2) : 0);
-    s.push(dia(X(dd), Y(hold), isP ? 7 : 5), ring(X(dd), Y(hold - off)));
+    sheet(X(dd), `${isP ? 'this page' : 'page'} · ${fmtYd(dd)} yd`, isP && T.layout.mode === 'combined' ? 'one mark: aim = impact' : `impact ${fmt2(Math.abs(off))} in ${dirWord(off)}`, isP, lifts[i]);
+    s.push(isP ? dia(X(dd), Y(hold), 7) + ring(X(dd), Y(hold - off)) : `<g opacity=".45">${dia(X(dd), Y(hold), 5)}${ring(X(dd), Y(hold - off))}</g>`);
   });
   // bullet path
   const path = pts.map((p, i) => `${i ? 'L' : 'M'}${f(X(p[0]))} ${f(Y(p[1]))}`).join(' ');
