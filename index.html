@@ -354,6 +354,7 @@ dialog p{font-size:.85rem;color:var(--ink-2);margin-bottom:.9rem;line-height:1.5
         <label for="scope-ret">Reticle</label><select id="scope-ret"></select>
         <label>Plane</label>
         <div class="seg mini" id="scope-plane"><button type="button" data-v="native" class="on" title="As the real reticle is built">As built</button><button type="button" data-v="ffp" title="First focal plane: marks true at every power">FFP</button><button type="button" data-v="sfp" title="Second focal plane: marks true only at the calibration power">SFP</button></div>
+        <span id="scope-dot-ctl" class="inline" hidden><label for="scope-dot">Dot</label><select id="scope-dot"><option value="1">1 MOA</option><option value="2">2 MOA</option><option value="3">3 MOA</option><option value="4">4 MOA</option><option value="6">6 MOA</option></select><select id="scope-ring" aria-label="Ring"><option value="none">no ring</option><option value="32">32 MOA ring</option><option value="65">65 MOA ring</option></select><select id="scope-dotc" aria-label="Dot color"><option value="red">red</option><option value="green">green</option></select></span>
         <span class="lim" id="scope-plane-note"></span>
       </div>
       <div class="scope-wrap">
@@ -1030,7 +1031,7 @@ function defaultDb() {
       makeGun({ name: 'Ruger 10/22', cartridge: '.22 LR', loadId: '22lr', sightHeight: 1.5, barrelLength: 18.5, defaultZero: 50, shootDistances: [10, 25], clickValue: '0.25moa' }),
     ],
     calibration: { printer: '', x: 1, y: 1 },
-    settings: { paper: 'letter', activeId: null, selected: [], scopeMag: 'auto', reticle: 'hash', plane: 'native' },
+    settings: { paper: 'letter', activeId: null, selected: [], scopeMag: 'auto', reticle: 'hash', plane: 'native', dotMOA: 2, dotRing: 'none', dotColor: 'red' },
   };
 }
 function normalizeGun(g) {
@@ -1516,6 +1517,15 @@ const RETICLES = [
       o.push(h.dot(0, 0, 0, 1.6));
       return { svg: o.join(''), caption: `${h.unitLabel} hash every ${+(step.toFixed(2))}` };
     } },
+  { id: 'reddot', name: 'Red dot (1× / magnifier)', unit: 'moa', plane: 'ffp', mags: [1, 3, 6],
+    draw: h => {
+      const size = +db.settings.dotMOA || 2, ring = db.settings.dotRing || 'none', col = db.settings.dotColor === 'green' ? '#1FD64A' : '#FF3B30';
+      const rpx = size / 2 * h.pu, core = Math.max(1.8, rpx), c = `cx="${h.f(h.X(0))}" cy="${h.f(h.Y(0))}"`;
+      const o = [`<circle ${c} r="${h.f(core * 2.4)}" fill="${col}" opacity=".16"/><circle ${c} r="${h.f(core * 1.5)}" fill="${col}" opacity=".35"/><circle ${c} r="${h.f(core)}" fill="${col}"/>`];
+      if (ring !== 'none') o.push(`<circle ${c} r="${h.f(Math.max(7, +ring / 2 * h.pu))}" fill="none" stroke="${col}" stroke-width="${h.f(Math.max(1.6, 1.2 * h.pu))}" opacity=".9"/>`);
+      const inches = size * h.env.moaIn;
+      return { svg: o.join(''), caption: `${size} MOA ${db.settings.dotColor === 'green' ? 'green' : 'red'} dot${ring !== 'none' ? ` in a ${ring} MOA ring` : ''} = ${fmt2(inches)} in at ${h.env.D} yd (drawn with bloom)` };
+    } },
   { id: 'duplex', name: 'Duplex', unit: 'moa', plane: 'sfp', calMag: 10,
     draw: h => { const fine = 6; const o = [h.line(-fine, 0, fine, 0, 1), h.line(0, -fine, 0, fine, 1), h.line(-h.Rmax, 0, -fine, 0, 4), h.line(fine, 0, h.Rmax, 0, 4), h.line(0, -h.Rmax, 0, -fine, 4), h.line(0, fine, 0, h.Rmax, 4)]; return { svg: o.join(''), caption: 'duplex, fine section ±6 MOA at calibration power' }; } },
   { id: 'mildot', name: 'Mil-dot', unit: 'mil', plane: 'sfp', calMag: 10,
@@ -1560,6 +1570,7 @@ const RETICLES = [
       return { svg: o.join(''), caption: 'ACSS-style: chevron on the 100 yd zero, BDC bars 300–800 (18 in ranging), true at 6×' };
     } },
 ];
+function snapMag(m, allowed) { return allowed.reduce((a, b) => Math.abs(b - m) < Math.abs(a - m) ? b : a, allowed[0]); }
 function drawReticle(def, env) {
   const { cx, cy, R, mag, unit, fovRadiusMOA, f } = env;
   const ru = def.unit === 'auto' ? unit : def.unit, unitLabel = ru === 'moa' ? 'MOA' : 'mil';
@@ -1570,7 +1581,7 @@ function drawReticle(def, env) {
   const factor = plane === 'sfp' ? calMag / mag : 1;              // what a mark labelled "1" really subtends now
   const X = u => cx + u * pu, Y = u => cy + u * pu;
   const h = {
-    def, pu, f, X, Y, unit: ru, unitLabel, mag, factor, Rmax: R / pu,
+    def, pu, f, X, Y, unit: ru, unitLabel, mag, factor, Rmax: R / pu, env,
     line: (x1, y1, x2, y2, w = 1) => `<line x1="${f(X(x1))}" y1="${f(Y(y1))}" x2="${f(X(x2))}" y2="${f(Y(y2))}" stroke="#14181C" stroke-width="${w}"/>`,
     cross: w => `<line x1="${cx - R}" y1="${cy}" x2="${cx + R}" y2="${cy}" stroke="#14181C" stroke-width="${w}"/><line x1="${cx}" y1="${cy - R}" x2="${cx}" y2="${cy + R}" stroke="#14181C" stroke-width="${w}"/>`,
     tick: (u, l) => `<line x1="${cx - l}" y1="${f(Y(u))}" x2="${cx + l}" y2="${f(Y(u))}" stroke="#14181C" stroke-width="1"/>`,      // on the vertical line
@@ -1581,11 +1592,11 @@ function drawReticle(def, env) {
     text: (x, y, t, dx = 0, dy = 0) => `<text x="${f(X(x) + dx)}" y="${f(Y(y) + dy)}" font-size="7.5" fill="#14181C" text-anchor="middle" font-family="ui-monospace,Menlo,monospace">${t}</text>`,
   };
   const out = def.draw(h);
-  const planeTxt = plane === 'sfp' ? `SFP, true at ${calMag}×` : 'FFP';
+  const planeTxt = def.mags ? (mag === 1 ? '1×' : `1× with a ${mag}× magnifier`) : plane === 'sfp' ? `SFP, true at ${calMag}×` : 'FFP';
   return {
     svg: `<g class="reticle">${out.svg}</g>`, factor, mag, plane, calMag, unit: ru,
     caption: `${def.name.replace(/ \(.*\)$/, '')} · ${planeTxt} · ${out.caption}`,
-    planeNote: plane === 'sfp' ? (Math.abs(factor - 1) < 0.01 ? `SFP · marks true at ${calMag}×` : `SFP · at ${mag}× each mark = ${factor.toFixed(2)}× its label`) : 'FFP · marks true at every power',
+    planeNote: def.mags ? `${planeTxt} · the dot keeps its MOA size; a magnifier just enlarges it` : plane === 'sfp' ? (Math.abs(factor - 1) < 0.01 ? `SFP · marks true at ${calMag}×` : `SFP · at ${mag}× each mark = ${factor.toFixed(2)}× its label`) : 'FFP · marks true at every power',
     note: plane === 'sfp' && Math.abs(factor - 1) > 0.01 ? ` Reticle is second-focal-plane and calibrated at ${calMag}×: at ${mag}× every ${unitLabel} mark really subtends ${factor.toFixed(2)} ${unitLabel}, so read the holds accordingly or go to ${calMag}×.` : '',
   };
 }
@@ -1609,19 +1620,25 @@ function renderScope(T) {
   const R = 180, cx = 200, cy = 200;
   const fovRadiusMOA = mag => 105 * 12 / 1.047 / 2 / mag;
   const fits = mag => { const r = fovRadiusMOA(mag) * 0.9; return holdMOA + 9 / moaIn <= r && Math.abs(holdMOA - 14 / moaIn) <= r && Math.abs(holdMOA) <= r; };
+  const reticleDef = RETICLES.find(r => r.id === db.settings.reticle) || RETICLES[0];
+  const allowed = reticleDef.mags || SCOPE_MAGS;                   // a red dot is 1x, or 3x/6x with a magnifier
   const want = db.settings.scopeMag || 'auto';
-  const mag = want === 'auto' ? ([...SCOPE_MAGS].reverse().find(fits) || 1) : +want;
+  const mag = want === 'auto' ? ([...allowed].reverse().find(fits) || allowed[0]) : snapMag(+want, allowed);
   const fitsNow = fits(mag);
   const RMOA = fovRadiusMOA(mag), RU = unit === 'moa' ? RMOA : RMOA * 1.047 / 3.6;
   const nice = unit === 'moa' ? [1, 2, 5, 10, 20, 50, 100, 200] : [0.2, 0.5, 1, 2, 5, 10, 20, 50];
   const hash = nice.find(h => RU / h <= 9) || nice[nice.length - 1];
   const pxU = R / RU, pxIn = pxU / (unit === 'moa' ? moaIn : milIn);
   const ty = cy + holdU * pxU;                       // where the vitals sit in the field
-  const reticleDef = RETICLES.find(r => r.id === db.settings.reticle) || RETICLES[0];
   const retSel = $('#scope-ret'); if (retSel.value !== reticleDef.id) retSel.value = reticleDef.id;
+  $('#scope-dot-ctl').hidden = reticleDef.id !== 'reddot';
+  $('#scope-plane').hidden = !!reticleDef.mags;
+  $('#scope-dot').value = String(db.settings.dotMOA || 2); $('#scope-ring').value = String(db.settings.dotRing || 'none'); $('#scope-dotc').value = db.settings.dotColor === 'green' ? 'green' : 'red';
   for (const b of document.querySelectorAll('#scope-plane [data-v]')) b.classList.toggle('on', b.dataset.v === (db.settings.plane || 'native'));
   const magSel = $('#scope-mag'); if (magSel.value !== want) magSel.value = want;
   magSel.options[0].textContent = want === 'auto' ? `Auto (${mag}×)` : 'Auto';
+  for (const o of magSel.options) if (o.value !== 'auto') o.disabled = !allowed.includes(+o.value);
+  if (want !== 'auto' && magSel.value !== String(mag)) magSel.value = String(mag);   // snapped to an allowed power
   const f = n => Math.round(n * 100) / 100;
   const s = [];
   s.push(`<defs><clipPath id="scope-clip"><circle cx="${cx}" cy="${cy}" r="${R}"/></clipPath>${plateDefs('a')}</defs>`);
@@ -1633,7 +1650,7 @@ function renderScope(T) {
   s.push(`<g transform="translate(${cx} ${f(ty)})">${plateSvg(pxIn, PLATE.centerAboveGround, 'a')}</g>`);
   s.push(`<circle cx="${cx}" cy="${f(ty)}" r="${Math.max(2.2, 4 * pxIn)}" fill="none" stroke="#E4511C" stroke-width="1.4"/>`);
   // reticle (see RETICLES): drawn in its own angular unit; SFP reticles stay fixed at their calibration power
-  const ret = drawReticle(reticleDef, { cx, cy, R, mag, unit, fovRadiusMOA, f });
+  const ret = drawReticle(reticleDef, { cx, cy, R, mag, unit, fovRadiusMOA, f, moaIn, D });
   s.push(ret.svg);
   // hold leader + label
   if (Math.abs(holdU) * pxU > 6) {
@@ -1663,7 +1680,7 @@ function renderScope(T) {
       const sx = (mv.clientX - rct.left) / rct.width * 444 - 22, sy = (mv.clientY - rct.top) / rct.height * 462 - 26;
       let ang = Math.atan2(sx - cx, -(sy - cy)) * 180 / Math.PI;      // 0 at 12 o'clock, clockwise positive
       if (ang < 0) ang = ang < -90 ? 180 : 0;
-      const idx = Math.round(ang / 180 * (SCOPE_MAGS.length - 1)), m = String(SCOPE_MAGS[idx]);
+      const idx = Math.round(ang / 180 * (SCOPE_MAGS.length - 1)), m = String(snapMag(SCOPE_MAGS[idx], (RETICLES.find(r => r.id === db.settings.reticle) || RETICLES[0]).mags || SCOPE_MAGS));
       if (db.settings.scopeMag !== m) { db.settings.scopeMag = m; saveDb(); renderScope(computeTarget(activeGun(), shown)); }
     };
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
@@ -1990,6 +2007,9 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#scope-ret').innerHTML = RETICLES.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
   $('#scope-ret').addEventListener('change', e => { db.settings.reticle = e.target.value; saveDb(); const g = activeGun(); if (g) renderScope(computeTarget(g, shown)); });
   $('#scope-plane').addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (!b) return; db.settings.plane = b.dataset.v; saveDb(); const g = activeGun(); if (g) renderScope(computeTarget(g, shown)); });
+  $('#scope-dot').addEventListener('change', e => { db.settings.dotMOA = +e.target.value; saveDb(); const g = activeGun(); if (g) renderScope(computeTarget(g, shown)); });
+  $('#scope-ring').addEventListener('change', e => { db.settings.dotRing = e.target.value; saveDb(); const g = activeGun(); if (g) renderScope(computeTarget(g, shown)); });
+  $('#scope-dotc').addEventListener('change', e => { db.settings.dotColor = e.target.value; saveDb(); const g = activeGun(); if (g) renderScope(computeTarget(g, shown)); });
   // calibration
   $('#cal-apply').addEventListener('click', applyCalibration);
   $('#cal-clear').addEventListener('click', clearCalibration);
