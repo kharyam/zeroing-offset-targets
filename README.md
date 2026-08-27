@@ -13,7 +13,7 @@ Single HTML file. Open `index.html` in a browser — no install, no server. It p
 - Click calculator: measure the group from the impact circle, get turret clicks with direction.
 - Printer calibration: measure the rulers once, enter what you got, and every PDF after that is compensated per axis and stamped.
 - Refuses to print things that aren't zeroing targets — offsets that don't fit on paper, and long zeros where the drop model rather than sight geometry would be setting the mark.
-- Side view of the trajectory, and a through-the-scope view with a holdover slider and magnification lever, for understanding what the numbers mean downrange.
+- Side view of the trajectory, and a through-the-scope view with a holdover slider and magnification lever, for understanding what the numbers mean downrange. Pick a reticle (fine hash, duplex, mil-dot, MOA ladder, TREMOR3-style tree, ACSS-style BDC), FFP or SFP; BDC reticles are checked against your load.
 
 ## Math
 
