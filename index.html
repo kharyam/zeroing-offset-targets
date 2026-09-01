@@ -73,7 +73,8 @@ a{color:inherit}
 .panel{background:var(--sheet);border:1px solid var(--rule);border-radius:4px;padding:1rem 1.05rem}
 .panel-head{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;margin-bottom:.8rem}
 .panel-head h2{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
-.stepno{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:4px;background:var(--accent);color:#fff;font-family:var(--mono);font-size:.62rem;font-weight:700;letter-spacing:0;margin-right:.45rem;flex:none;vertical-align:-2px}
+.stepno{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:4px;background:var(--accent);color:#fff;font-family:var(--mono);font-size:.68rem;font-weight:700;letter-spacing:0;margin-right:.5rem;flex:none}
+.panel-head h2:has(.stepno),.subhead:has(.stepno){display:flex;align-items:center}
 .panel-head .hint{font-size:.72rem;color:var(--ink-3)}
 
 /* ---------- inventory ---------- */
