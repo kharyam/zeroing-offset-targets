@@ -75,6 +75,26 @@ a{color:inherit}
 .panel-head h2{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
 .stepno{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:4px;background:var(--accent);color:#fff;font-family:var(--mono);font-size:.68rem;font-weight:700;letter-spacing:0;margin-right:.5rem;flex:none}
 .panel-head h2:has(.stepno),.subhead:has(.stepno){display:flex;align-items:center}
+#sec-load,#sec-dist{display:flex;flex-direction:column;gap:.75rem}
+/* ---- guided tour ---- */
+#tour-veil{display:none;position:fixed;inset:0;width:100%;height:100%;z-index:60;opacity:0;transition:opacity .25s ease}
+#tour-veil.show{display:block}
+#tour-veil.on{opacity:1}
+#tour-card{position:fixed;z-index:61;width:min(340px,calc(100vw - 2rem));background:#fff;border:1px solid var(--rule-2);border-radius:10px;box-shadow:0 10px 32px rgba(20,24,28,.22);padding:.9rem 1rem;opacity:0;transition:opacity .2s ease}
+#tour-card.on{opacity:1}
+#tour-card .tour-label{display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem}
+#tour-card .tour-label b{font-size:.78rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);flex:1}
+#tour-card .tour-label .stepno{margin-right:0}
+#tour-chip[hidden]{display:none}
+#tour-skip{border:0;background:none;color:var(--ink-3);font-size:1.05rem;line-height:1;cursor:pointer;padding:.1rem .25rem;border-radius:4px}
+#tour-skip:hover{color:var(--accent-ink);background:var(--accent-soft)}
+#tour-card p{font-size:.82rem;line-height:1.45;margin:0 0 .75rem}
+#tour-card .tour-foot{display:flex;align-items:center;justify-content:space-between;gap:.6rem}
+.tour-dots{display:flex;gap:5px}
+.tour-dots i{width:6px;height:6px;border-radius:50%;background:var(--rule-2)}
+.tour-dots i.on{background:var(--accent)}
+.chip .dot.tour{background:var(--accent)}
+@media (prefers-reduced-motion:reduce){#tour-veil,#tour-card{transition:none}}
 .panel-head .hint{font-size:.72rem;color:var(--ink-3)}
 
 /* ---------- inventory ---------- */
@@ -304,14 +324,15 @@ dialog p{font-size:.85rem;color:var(--ink-2);margin-bottom:.9rem;line-height:1.5
   <div class="spacer"></div>
   <span id="selftest-chip" class="chip clickable" title="Math self-test against the spec's golden vectors"><span class="dot"></span><span>self-test…</span></span>
   <span id="pdf-chip" class="chip"><span class="dot"></span><span>PDF engine…</span></span>
+  <button id="tour-btn" class="chip clickable" type="button" title="Replay the guided tour of the app"><span class="dot tour"></span><span>Tutorial</span></button>
 </header>
 <div id="pdf-banner" class="pdf-banner"></div>
 
 <main class="app">
   <!-- ================= LEFT: inventory + setup ================= -->
   <div class="col">
-    <section class="panel">
-      <div class="panel-head"><h2><span class="stepno">1</span>Inventory</h2><span class="hint">tick guns to batch</span></div>
+    <section class="panel" id="inv-panel">
+      <div class="panel-head"><h2><span class="stepno">1</span>Inventory</h2><span class="hint">tick firearms to batch</span></div>
       <div id="gun-list" class="gun-list"></div>
       <div class="inv-actions">
         <button class="btn small" id="add-gun">+ Add firearm</button>
@@ -334,7 +355,7 @@ dialog p{font-size:.85rem;color:var(--ink-2);margin-bottom:.9rem;line-height:1.5
       <div id="warnings" class="warn-stack"></div>
     </section>
 
-    <section class="panel">
+    <section class="panel" id="traj-panel">
       <div class="panel-head"><h2>Side view</h2><span class="hint">vertical in inches, range in yards — not to scale</span></div>
       <div id="traj"></div>
       <div class="traj-legend">
@@ -342,7 +363,7 @@ dialog p{font-size:.85rem;color:var(--ink-2);margin-bottom:.9rem;line-height:1.5
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel" id="scope-panel">
       <div class="panel-head"><h2>Through the scope</h2><span class="hint">holdover past your zero — no wind, no spin drift</span></div>
       <div class="scope-ctl">
         <label for="scope-yd">Target at</label>
@@ -368,7 +389,7 @@ dialog p{font-size:.85rem;color:var(--ink-2);margin-bottom:.9rem;line-height:1.5
 
   <!-- ================= RIGHT: output, click calculator, calibration ================= -->
   <div class="col col-tools">
-    <section class="panel">
+    <section class="panel" id="print-panel">
       <div class="panel-head"><h2><span class="stepno">5</span>Print</h2></div>
       <div class="stack">
         <div class="row">
@@ -387,7 +408,7 @@ dialog p{font-size:.85rem;color:var(--ink-2);margin-bottom:.9rem;line-height:1.5
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel" id="calc-panel">
       <div class="panel-head"><h2>Click calculator</h2><span class="hint" id="calc-dist"></span></div>
       <div class="form compact">
         <div class="row row-3">
@@ -400,7 +421,7 @@ dialog p{font-size:.85rem;color:var(--ink-2);margin-bottom:.9rem;line-height:1.5
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel" id="calib-panel">
       <div class="panel-head"><h2>Printer calibration</h2><span class="hint">optional</span></div>
       <div class="form">
         <div class="note">Print one target, measure both rulers with a good rule, and enter what you actually got. The app scales each axis independently.</div>
@@ -417,6 +438,16 @@ dialog p{font-size:.85rem;color:var(--ink-2);margin-bottom:.9rem;line-height:1.5
 </main>
 
 <div class="footer-note">All data stays in this browser (localStorage). Export JSON to move it. Flat-fire model only — no wind, spin drift, or angle of fire; at these distances they are noise, and the geometry dominates.</div>
+
+<svg id="tour-veil" aria-hidden="true">
+  <defs><mask id="tour-mask"><rect x="0" y="0" width="100%" height="100%" fill="#fff"/><rect id="tour-hole" fill="#000" rx="10" x="0" y="0" width="0" height="0"/></mask></defs>
+  <rect x="0" y="0" width="100%" height="100%" fill="rgba(20,24,28,.55)" mask="url(#tour-mask)"/>
+</svg>
+<div id="tour-card" role="dialog" aria-label="Tutorial" hidden>
+  <div class="tour-label"><span class="stepno" id="tour-chip" hidden></span><b id="tour-title"></b><button id="tour-skip" type="button" title="Skip the tour">×</button></div>
+  <p id="tour-copy"></p>
+  <div class="tour-foot"><div class="tour-dots" id="tour-dots"></div><span class="inline"><button class="btn small ghost" id="tour-back" type="button">Back</button><button class="btn small" id="tour-next" type="button">Next</button></span></div>
+</div>
 
 <dialog id="selftest-dlg"><div class="dlg"><h3>Math self-test</h3><p>Golden vectors from the build spec, tolerance ±0.03 in, plus layout and click-direction assertions.</p><div id="selftest-out" class="selftest"></div><p style="margin-top:.9rem;margin-bottom:0"><button class="btn small ghost" onclick="this.closest('dialog').close()">Close</button></p></div></dialog>
 <dialog id="preview-dlg" class="preview-dlg" aria-label="Target page preview">
@@ -560,7 +591,7 @@ const LOADS = [
   { id: '4570-405', cartridge: '.45-70 Govt',      name: '405 gr cast (trapdoor-safe)', v0: 1350, bc: 0.280, refBarrel: 18.5, fpsPerIn: 15, range: [16, 24] },
 ];
 const SIGHT_PRESETS = {
-  rifle:   [{ h: 1.0, label: 'Lever-gun irons / ghost ring' }, { h: 1.5, label: 'Low rings on a rail (scout / rimfire scope)' }, { h: 2.4, label: 'Low mount' }, { h: 2.6, label: 'AR flat-top / absolute co-witness' }, { h: 2.9, label: '1.93 in cantilever' }, { h: 3.1, label: 'Tall mount' }],
+  rifle:   [{ h: 1.0, label: 'Lever-action irons / ghost ring' }, { h: 1.5, label: 'Low rings on a rail (scout / rimfire scope)' }, { h: 2.4, label: 'Low mount' }, { h: 2.6, label: 'AR flat-top / absolute co-witness' }, { h: 2.9, label: '1.93 in cantilever' }, { h: 3.1, label: 'Tall mount' }],
   handgun: [{ h: 0.65, label: 'Iron sights (0.60–0.75)' }, { h: 1.0, label: 'Slide-mounted red dot (0.90–1.10)' }],
 };
 const CLICK_VALUES = [
@@ -1174,6 +1205,7 @@ function renderSetup() {
       <div class="field"><label for="f-shp">Preset</label><select id="f-shp" data-f="shPreset">${sp.map(p => `<option value="${p.h}" ${presetMatch && presetMatch.h === p.h ? 'selected' : ''}>${p.h.toFixed(2)} in — ${esc(p.label)}</option>`).join('')}<option value="" ${presetMatch ? '' : 'selected'}>Custom (measured)</option></select></div>
       ${fieldNum('f-sh', 'Height', g.sightHeight, '0.05', 'in, optic center to bore center')}
     </div>
+    <div id="sec-load">
     <div class="subhead"><span class="stepno">3</span>Load</div>
     <div class="field"><label for="f-preset">Preset load</label><select id="f-preset" data-f="loadPreset"><option value="">Custom</option>${loadOpts}</select></div>
     <div class="row row-3">
@@ -1185,6 +1217,8 @@ function renderSetup() {
       ${fieldNum('f-barrel', 'Barrel length', g.barrelLength ?? '', '0.5', 'in — optional')}
       <div class="field"><label>&nbsp;</label><div class="note" id="est-note">${estimateNote(g)}</div></div>
     </div>
+    </div>
+    <div id="sec-dist">
     <div class="subhead"><span class="stepno">4</span>Distances</div>
     <div class="field"><label>Pages to print — shoot this target at <span class="u">${g.shootDistances.length > 1 ? 'select one to preview' : 'yd'}</span></label>
       <div class="chips" id="dist-chips">${g.shootDistances.map(d => { const on = Math.abs(d - g.previewDistance) < 0.01; return `<span class="chip-d${on ? ' on' : ''}" data-dist="${d}" role="radio" aria-checked="${on}" tabindex="0" title="${on ? 'Previewing this page' : 'Preview this page'}"><span class="dot"></span>${fmtYd(d)} yd${g.shootDistances.length > 1 ? `<button type="button" class="chip-x" data-dist-del="${d}" aria-label="Remove the ${fmtYd(d)} yd page" title="Remove this page">×</button>` : ''}</span>`; }).join('')}
@@ -1193,7 +1227,8 @@ function renderSetup() {
       ${fieldNum('f-z', 'Rifle zeroed at', g.defaultZero, '1', 'yd', 'min="1"')}
       <div class="field"><label for="f-click">Turret clicks</label><select id="f-click" data-f="clickValue">${CLICK_VALUES.map(c => `<option value="${c.id}" ${g.clickValue === c.id ? 'selected' : ''}>${c.label}</option>`).join('')}</select></div>
     </div>
-    <div class="note"><b>“Zeroed at”</b> is the distance where the bullet hits your point of aim once the turrets are set — the scope absorbs all the drop to get there. The target shows where the group must land at the <b>shooting</b> distance for that zero to be true. It is not a holdover chart: if your scope is already zeroed and you want to know where to hold for a far shot, that is “shoot at far, zeroed at near”, and it will usually not fit on paper.</div>`;
+    <div class="note"><b>“Zeroed at”</b> is the distance where the bullet hits your point of aim once the turrets are set — the scope absorbs all the drop to get there. The target shows where the group must land at the <b>shooting</b> distance for that zero to be true. It is not a holdover chart: if your scope is already zeroed and you want to know where to hold for a far shot, that is “shoot at far, zeroed at near”, and it will usually not fit on paper.</div>
+    </div>`;
 }
 function renderHoldBlock(g) {
   if (g.sightType !== 'irons') return '';
@@ -2023,9 +2058,98 @@ document.addEventListener('DOMContentLoaded', () => {
   if (window.jspdf) { pdfChip.className = 'chip ok'; pdfChip.lastElementChild.textContent = 'PDF engine ready'; }
   else { pdfChip.className = 'chip bad'; pdfChip.lastElementChild.textContent = 'PDF engine missing'; showPdfBanner(); }
 
+  // ---- guided tour ----
+  const TOUR_STEPS = [
+    { sel: '#inv-panel', n: 1, title: 'Inventory', copy: 'Your firearms live here, saved in this browser. Click one to work on it, tick the boxes to include several in a batch PDF, and use Export / Import JSON to back them up or move them.' },
+    { sel: '#setup-panel', until: '#sec-load', block: 'start', n: 2, title: 'Setup', copy: 'The firearm itself: rifle or handgun, optic or irons, and — the number that matters most at short range — the sight height over bore. Pick a preset mount or measure your own.' },
+    { sel: '#sec-load', n: 3, title: 'Load', copy: 'Pick a preset load or type your own velocity and G1 ballistic coefficient. Enter a barrel length and the app can estimate velocity for common cartridges — your own chronograph number always wins.' },
+    { sel: '#sec-dist', n: 4, title: 'Distances', copy: 'The pages you’ll print (10 and 25 yd suit most indoor ranges), the zero you actually want, and your turret click value. Add a page for any distance your range allows.' },
+    { sel: '#readout-panel', title: 'Readout', copy: 'The headline: aim at the diamond, and where the group must land on this page for your zero to be true — plus the numbers behind it and any warnings.' },
+    { sel: '#traj-panel', title: 'Side view', copy: 'The bullet’s arc from muzzle to zero, with every paper page on the way. Click a sheet (or the orange marker) to switch which page you’re previewing.' },
+    { sel: '#scope-panel', title: 'Through the scope', copy: 'What the holdover looks like downrange once you’re zeroed. Drag the slider to move the steel, drag the lever on the scope ring to change power, and pick your reticle — BDC reticles are checked against your load.' },
+    { sel: '#print-panel', n: 5, title: 'Print', copy: 'The thumbnail is exactly what prints — click it for a full-size, pageable preview. Generate one PDF or a batch for every ticked firearm. Print at 100% / Actual size, never “fit to page”.' },
+    { sel: '#calc-panel', title: 'Click calculator', copy: 'For the range: measure your group’s center from the printed impact circle and it turns the miss into turret clicks, with direction.' },
+    { sel: '#calib-panel', title: 'Printer calibration', copy: 'Optional. If the rulers on a printed page don’t measure exactly 4.00 in, enter what you got — every later PDF is scaled to compensate, per axis.' },
+  ];
+  const tour = (() => {
+    const KEY = 'zt-tour-done';
+    const veil = $('#tour-veil'), hole = $('#tour-hole'), card = $('#tour-card');
+    const chipEl = $('#tour-chip'), titleEl = $('#tour-title'), copyEl = $('#tour-copy'), dotsEl = $('#tour-dots');
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let i = -1, raf = 0;
+    function rectFor(s) {
+      const el = document.querySelector(s.sel); if (!el) return null;
+      const r = el.getBoundingClientRect();
+      let bottom = r.bottom;
+      if (s.until) { const u = document.querySelector(s.until); if (u) bottom = Math.min(bottom, u.getBoundingClientRect().top - 8); }
+      const pad = 6;
+      return { x: r.left - pad, y: r.top - pad, w: r.width + 2 * pad, h: bottom - r.top + 2 * pad };
+    }
+    function place(R) {
+      const cw = card.offsetWidth, ch = card.offsetHeight, vw = innerWidth, vh = innerHeight, m = 14;
+      let x, y;
+      if (R.x + R.w + cw + 2 * m <= vw) { x = R.x + R.w + m; y = R.y; }
+      else if (R.x - cw - 2 * m >= 0) { x = R.x - cw - m; y = R.y; }
+      else if (R.y + R.h + ch + m <= vh) { x = R.x; y = R.y + R.h + m; }
+      else { x = R.x; y = R.y - ch - m; }
+      x = Math.max(m, Math.min(x, vw - cw - m)); y = Math.max(m, Math.min(y, vh - ch - m));
+      card.style.left = x + 'px'; card.style.top = y + 'px';
+    }
+    function track() {
+      if (i < 0) return;
+      const R = rectFor(TOUR_STEPS[i]);
+      if (R) {
+        hole.setAttribute('x', R.x); hole.setAttribute('y', R.y);
+        hole.setAttribute('width', Math.max(0, R.w)); hole.setAttribute('height', Math.max(0, R.h));
+        place(R);
+      }
+      raf = requestAnimationFrame(track);
+    }
+    function go(n) {
+      if (n >= TOUR_STEPS.length) return end(true);
+      i = Math.max(0, n);
+      const s = TOUR_STEPS[i];
+      const el = document.querySelector(s.sel);
+      if (el) el.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: s.block || 'center' });
+      chipEl.hidden = !s.n; if (s.n) chipEl.textContent = s.n;
+      titleEl.textContent = s.title; copyEl.textContent = s.copy;
+      dotsEl.innerHTML = TOUR_STEPS.map((_, k) => `<i${k === i ? ' class="on"' : ''}></i>`).join('');
+      $('#tour-back').disabled = i === 0;
+      $('#tour-next').textContent = i === TOUR_STEPS.length - 1 ? 'Done' : 'Next';
+    }
+    function start() {
+      if (i >= 0) return;
+      veil.classList.add('show'); card.hidden = false;
+      requestAnimationFrame(() => { veil.classList.add('on'); card.classList.add('on'); });
+      go(0);
+      cancelAnimationFrame(raf); raf = requestAnimationFrame(track);
+      document.addEventListener('keydown', keys);
+    }
+    function end(markDone) {
+      i = -1; cancelAnimationFrame(raf);
+      veil.classList.remove('on'); card.classList.remove('on');
+      setTimeout(() => { veil.classList.remove('show'); card.hidden = true; }, reduced ? 0 : 250);
+      document.removeEventListener('keydown', keys);
+      if (markDone) try { localStorage.setItem(KEY, '1'); } catch (e) { }
+    }
+    function keys(e) {
+      if (e.key === 'Escape') { e.preventDefault(); end(true); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); go(i + 1); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); if (i > 0) go(i - 1); }
+    }
+    $('#tour-next').addEventListener('click', () => go(i + 1));
+    $('#tour-back').addEventListener('click', () => { if (i > 0) go(i - 1); });
+    $('#tour-skip').addEventListener('click', () => end(true));
+    const done = () => { try { return !!localStorage.getItem(KEY); } catch (e) { return true; } };
+    return { start, go, end, done };
+  })();
+  window.tour = tour;
+  $('#tour-btn').addEventListener('click', tour.start);
+
   runSelfTest();
   renderAll(true);
   const c = db.calibration; if (calibActive()) { $('#cal-h').value = (4 / c.x).toFixed(2); $('#cal-v').value = (4 / c.y).toFixed(2); }
+  if (!tour.done()) setTimeout(tour.start, 450);
 });
 </script>
 </body>

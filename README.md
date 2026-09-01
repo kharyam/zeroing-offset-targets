@@ -9,7 +9,7 @@ Single HTML file. Open `index.html` in a browser — no install, no server. It p
 ## What it does
 
 - Keeps an inventory of firearms: sight height, load (velocity + G1 BC), barrel length, zero distance, turret click value, and the distances you'll shoot at (10 and 25 yards by default — shoot the 10 first, dial, then the 25).
-- Generates a print-exact PDF: cover page with instructions, then one target per gun per distance, each labelled with the distance to hang it at. Full-page 0.25 in grid centered on the expected impact, two 4 in rulers to catch printer scaling, sight-height variance table, clicks-per-square note.
+- Generates a print-exact PDF: cover page with instructions, then one target per firearm per distance, each labelled with the distance to hang it at. Full-page 0.25 in grid centered on the expected impact, two 4 in rulers to catch printer scaling, sight-height variance table, clicks-per-square note.
 - Click calculator: measure the group from the impact circle, get turret clicks with direction.
 - Printer calibration: measure the rulers once, enter what you got, and every PDF after that is compensated per axis and stamped.
 - Refuses to print things that aren't zeroing targets — offsets that don't fit on paper, and long zeros where the drop model rather than sight geometry would be setting the mark.
