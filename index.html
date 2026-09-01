@@ -1495,6 +1495,7 @@ function plateSvg(pxIn, groundIn, id) {
     </g>
     <polygon points="${PLATE.poly.map(P).join(' ')}" fill="url(#steel-${id})" stroke="#2A3138" stroke-width="${Math.max(0.6, 0.35 * pxIn)}" stroke-linejoin="round"/>
     <rect x="${q(-PLATE.azone[0] / 2)}" y="${q(-PLATE.azone[1] / 2)}" width="${q(PLATE.azone[0])}" height="${q(PLATE.azone[1])}" fill="none" stroke="#F4F1EA" stroke-width="${Math.max(0.8, 0.35 * pxIn)}"/>
+    <circle cx="0" cy="0" r="${Math.max(1.4, 1.0 * pxIn)}" fill="#F4F1EA" opacity=".92"/>
     <rect x="${q(-0.35)}" y="${q(-8.1)}" width="${q(0.7)}" height="${q(0.7)}" fill="#EEF1F4"/>
   </g>`;
 }
