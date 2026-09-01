@@ -73,6 +73,7 @@ a{color:inherit}
 .panel{background:var(--sheet);border:1px solid var(--rule);border-radius:4px;padding:1rem 1.05rem}
 .panel-head{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;margin-bottom:.8rem}
 .panel-head h2{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
+.stepno{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:4px;background:var(--accent);color:#fff;font-family:var(--mono);font-size:.62rem;font-weight:700;letter-spacing:0;margin-right:.45rem;flex:none;vertical-align:-2px}
 .panel-head .hint{font-size:.72rem;color:var(--ink-3)}
 
 /* ---------- inventory ---------- */
@@ -309,7 +310,7 @@ dialog p{font-size:.85rem;color:var(--ink-2);margin-bottom:.9rem;line-height:1.5
   <!-- ================= LEFT: inventory + setup ================= -->
   <div class="col">
     <section class="panel">
-      <div class="panel-head"><h2>Inventory</h2><span class="hint">tick guns to batch</span></div>
+      <div class="panel-head"><h2><span class="stepno">1</span>Inventory</h2><span class="hint">tick guns to batch</span></div>
       <div id="gun-list" class="gun-list"></div>
       <div class="inv-actions">
         <button class="btn small" id="add-gun">+ Add firearm</button>
@@ -320,7 +321,7 @@ dialog p{font-size:.85rem;color:var(--ink-2);margin-bottom:.9rem;line-height:1.5
     </section>
 
     <section class="panel" id="setup-panel">
-      <div class="panel-head"><h2>Setup</h2><span class="hint" id="setup-hint"></span></div>
+      <div class="panel-head"><h2><span class="stepno">2</span>Setup</h2><span class="hint" id="setup-hint"></span></div>
       <div id="setup-form" class="form"></div>
     </section>
   </div>
@@ -367,7 +368,7 @@ dialog p{font-size:.85rem;color:var(--ink-2);margin-bottom:.9rem;line-height:1.5
   <!-- ================= RIGHT: output, click calculator, calibration ================= -->
   <div class="col col-tools">
     <section class="panel">
-      <div class="panel-head"><h2>Print</h2></div>
+      <div class="panel-head"><h2><span class="stepno">5</span>Print</h2></div>
       <div class="stack">
         <div class="row">
           <div class="field"><label>Paper</label>
@@ -1172,7 +1173,7 @@ function renderSetup() {
       <div class="field"><label for="f-shp">Preset</label><select id="f-shp" data-f="shPreset">${sp.map(p => `<option value="${p.h}" ${presetMatch && presetMatch.h === p.h ? 'selected' : ''}>${p.h.toFixed(2)} in — ${esc(p.label)}</option>`).join('')}<option value="" ${presetMatch ? '' : 'selected'}>Custom (measured)</option></select></div>
       ${fieldNum('f-sh', 'Height', g.sightHeight, '0.05', 'in, optic center to bore center')}
     </div>
-    <div class="subhead">Load</div>
+    <div class="subhead"><span class="stepno">3</span>Load</div>
     <div class="field"><label for="f-preset">Preset load</label><select id="f-preset" data-f="loadPreset"><option value="">Custom</option>${loadOpts}</select></div>
     <div class="row row-3">
       <div class="field"><label for="f-lname">Bullet</label><input id="f-lname" data-f="loadName" class="text" type="text" value="${esc(g.load.name)}"></div>
@@ -1183,7 +1184,7 @@ function renderSetup() {
       ${fieldNum('f-barrel', 'Barrel length', g.barrelLength ?? '', '0.5', 'in — optional')}
       <div class="field"><label>&nbsp;</label><div class="note" id="est-note">${estimateNote(g)}</div></div>
     </div>
-    <div class="subhead">Distances</div>
+    <div class="subhead"><span class="stepno">4</span>Distances</div>
     <div class="field"><label>Pages to print — shoot this target at <span class="u">${g.shootDistances.length > 1 ? 'select one to preview' : 'yd'}</span></label>
       <div class="chips" id="dist-chips">${g.shootDistances.map(d => { const on = Math.abs(d - g.previewDistance) < 0.01; return `<span class="chip-d${on ? ' on' : ''}" data-dist="${d}" role="radio" aria-checked="${on}" tabindex="0" title="${on ? 'Previewing this page' : 'Preview this page'}"><span class="dot"></span>${fmtYd(d)} yd${g.shootDistances.length > 1 ? `<button type="button" class="chip-x" data-dist-del="${d}" aria-label="Remove the ${fmtYd(d)} yd page" title="Remove this page">×</button>` : ''}</span>`; }).join('')}
         <span class="chip-add closed"><button type="button" class="btn small ghost opener" id="f-dadd-open">+ Add distance</button><input id="f-dadd" type="number" min="1" step="1" placeholder="yd" aria-label="New shooting distance in yards"><button type="button" class="btn small commit" id="f-dadd-btn">Add</button></span></div></div>
